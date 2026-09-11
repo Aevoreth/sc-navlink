@@ -1,14 +1,15 @@
 name: Build check
 
 # Verifies the app compiles cleanly and the unit test suite passes on a stock
-# Windows runner for every push / PR to main. Does not produce or publish
-# anything.
+# Windows runner for every push / PR to the stable and active foundation branches.
+# Does not produce or publish anything.
 
 on:
+  workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, foundation/0.1]
   pull_request:
-    branches: [main]
+    branches: [main, foundation/0.1]
 
 permissions:
   contents: read
