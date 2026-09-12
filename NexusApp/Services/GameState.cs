@@ -98,6 +98,27 @@ public sealed record GameHaulingState(
     }
 }
 
+/// <summary>How the current wallet anchor was obtained. None means no trusted balance exists.</summary>
+public enum GameWalletProvenance { None, Manual, Ocr }
+
+/// <summary>
+/// Immutable wallet slice published into <see cref="GameState"/>.
+///
+/// <see cref="Estimate"/> is derived (anchor plus later settlements). The tracker remains the
+/// owner of per-channel persistence and untracked rows. A log reset keeps the anchor and
+/// estimate; only the session-scoped untracked display count rolls.
+/// </summary>
+public sealed record GameWalletState(
+    bool HasAnchor,
+    long? Estimate,
+    long? Anchor,
+    DateTime? AnchorUtc,
+    GameWalletProvenance Provenance,
+    int SessionUntrackedCount)
+{
+    public static GameWalletState Empty { get; } = new(false, null, null, null, GameWalletProvenance.None, 0);
+}
+
 /// <summary>
 /// App-lifetime observable operational state for SC-navLink.
 ///
@@ -113,6 +134,7 @@ public sealed class GameState
     private GameSessionState _session = GameSessionState.Empty;
     private GameShardState _shard = GameShardState.Empty;
     private GameHaulingState _hauling = GameHaulingState.Empty;
+    private GameWalletState _wallet = GameWalletState.Empty;
 
     /// <summary>Latest location snapshot. The returned record is immutable and safe to retain.</summary>
     public GameLocationState Location
@@ -150,6 +172,15 @@ public sealed class GameState
         }
     }
 
+    /// <summary>Latest wallet snapshot. The returned record is immutable and safe to retain.</summary>
+    public GameWalletState Wallet
+    {
+        get
+        {
+            lock (_gate) return _wallet;
+        }
+    }
+
     /// <summary>Raised when any shared-state slice changes.</summary>
     public event Action? Changed;
 
@@ -164,6 +195,9 @@ public sealed class GameState
 
     /// <summary>Raised when the hauling snapshot changes.</summary>
     public event Action? HaulingChanged;
+
+    /// <summary>Raised when the wallet snapshot changes.</summary>
+    public event Action? WalletChanged;
 
     /// <summary>
     /// Publish the result of the location domain service. Internal so ordinary consumers cannot
@@ -183,6 +217,10 @@ public sealed class GameState
     /// <summary>Publish the result of the haul domain service.</summary>
     internal void PublishHauling(GameHaulingState hauling)
         => Publish(ref _hauling, hauling, () => HaulingChanged);
+
+    /// <summary>Publish the result of the wallet domain service.</summary>
+    internal void PublishWallet(GameWalletState wallet)
+        => Publish(ref _wallet, wallet, () => WalletChanged);
 
     private void Publish<T>(ref T field, T value, Func<Action?> sliceEvent) where T : class
     {

@@ -49,7 +49,8 @@ public sealed class WalletTracker : IDisposable
     public event Action? Changed;
 
     public WalletTracker(ProfitTracker profit, GameLogFeed? feed = null, string? walletPath = null,
-                         Func<GameChannel>? channel = null, Action<Action>? flushScheduler = null)
+                         Func<GameChannel>? channel = null, Action<Action>? flushScheduler = null,
+                         GameState? gameState = null)
     {
         _profit = profit;
         _feed = feed ?? new GameLogFeed();
@@ -57,12 +58,20 @@ public sealed class WalletTracker : IDisposable
         _walletPath = walletPath ?? WalletStore.DefaultPath;
         _channel = channel ?? (() => _feed.ActiveChannel);
         _flushScheduler = flushScheduler;
+        GameState = gameState;
         _feedPath = string.IsNullOrEmpty(_feed.Path) ? null : _feed.Path;
         _state = WalletStore.Load(_walletPath, out var reason) ?? new WalletState();
         if (reason is not null) Logger.Info($"[WALLET] starting fresh wallet state: {reason}");
         _sub = _feed.Subscribe(Ingest, includeReplay: true, onLogReset: Reset, onStarted: OnFeedStarted);
         _profit.Changed += OnProfitChanged;
+        PublishGameStateWallet();
     }
+
+    /// <summary>
+    /// Shared operational state this tracker publishes the wallet slice into. Null when a test
+    /// or inherited constructor did not supply a store.
+    /// </summary>
+    public GameState? GameState { get; }
 
     public bool HasAnchor => Current() is not null;
     public DateTime? AnchorUtc => Current()?.AnchorUtc;
@@ -256,7 +265,7 @@ public sealed class WalletTracker : IDisposable
     {
         Flush();
         _sessionStartUtc = null;
-        Changed?.Invoke();
+        RaiseChanged();
     }
 
     internal void OnFeedStarted(string path, bool willReplayToMe)
@@ -266,7 +275,7 @@ public sealed class WalletTracker : IDisposable
         if (willReplayToMe || newFile) Reset();
     }
 
-    private void OnProfitChanged() => Changed?.Invoke();
+    private void OnProfitChanged() => RaiseChanged();
 
     private WalletChannelState? Current()
     {
@@ -308,8 +317,40 @@ public sealed class WalletTracker : IDisposable
         if (!_flushPending) return;
         _flushPending = false;
         WalletStore.Save(_walletPath, _state);
+        RaiseChanged();
+    }
+
+    private void RaiseChanged()
+    {
+        PublishGameStateWallet();
         Changed?.Invoke();
     }
+
+    private void PublishGameStateWallet()
+    {
+        if (GameState is null) return;
+        var ch = Current();
+        if (ch is null)
+        {
+            GameState.PublishWallet(GameWalletState.Empty);
+            return;
+        }
+
+        GameState.PublishWallet(new GameWalletState(
+            true,
+            Estimate,
+            ch.Anchor,
+            ch.AnchorUtc,
+            ProvenanceOf(ch.Source),
+            SessionUntracked.Count));
+    }
+
+    private static GameWalletProvenance ProvenanceOf(string? source) => source switch
+    {
+        "Manual" => GameWalletProvenance.Manual,
+        "Ocr" => GameWalletProvenance.Ocr,
+        _ => GameWalletProvenance.None,
+    };
 
     public void Dispose()
     {
