@@ -22,6 +22,17 @@ public class DataService : IDisposable
     // connection must not flood nexus.log with the same failure over and over.
     private bool _miningVersionReadFailed;
 
+    /// <summary>
+    /// Shared operational state this service publishes the refinery slice into. Null when a
+    /// test or inherited constructor did not supply a store.
+    /// </summary>
+    public GameState? GameState { get; }
+
+    public DataService(GameState? gameState = null)
+    {
+        GameState = gameState;
+    }
+
     /// <summary>The mining-data version currently applied to the database. This is the
     /// seed-content version (auto-updatable) - distinct from <see cref="GameData.Version"/>,
     /// which tracks the Star Citizen patch and is bumped manually. Degrades to the embedded
@@ -56,6 +67,7 @@ public class DataService : IDisposable
         CreateSchema();
         MigrateColumns();
         ApplySeed();
+        PublishRefineryJobs();
     }
 
     private void CreateSchema()
@@ -802,10 +814,14 @@ public class DataService : IDisposable
             ("@n", wo.Notes), ("@ca", wo.CreatedAt.ToString("O")),
             ("@ts", (object?)wo.TimerStart?.ToString("O") ?? DBNull.Value),
             ("@te", (object?)wo.TimerEnd?.ToString("O") ?? DBNull.Value));
+        PublishRefineryJobs();
     }
 
-    public void DeleteWorkOrder(string id) =>
+    public void DeleteWorkOrder(string id)
+    {
         ExecSafe(nameof(DeleteWorkOrder), "DELETE FROM work_orders WHERE id=@id", ("@id", id));
+        PublishRefineryJobs();
+    }
 
     // ── Shopping List ────────────────────────────────────────────────────────
 
@@ -840,7 +856,17 @@ public class DataService : IDisposable
 
     public void ClearShoppingList() => ExecSafe(nameof(ClearShoppingList), "DELETE FROM shopping_list");
 
-    public void ClearWorkOrders() => ExecSafe(nameof(ClearWorkOrders), "DELETE FROM work_orders");
+    public void ClearWorkOrders()
+    {
+        ExecSafe(nameof(ClearWorkOrders), "DELETE FROM work_orders");
+        PublishRefineryJobs();
+    }
+
+    private void PublishRefineryJobs()
+    {
+        if (GameState is null) return;
+        GameState.PublishRefinery(RefineryJobProjection.FromOrders(GetWorkOrders()));
+    }
 
     // ── Pinning ──────────────────────────────────────────────────────────────
 
