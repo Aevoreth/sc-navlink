@@ -330,7 +330,7 @@ public partial class App : Application
         // (pre-5.0.1) to the version-neutral %AppData%\NexusApp, so upgraders
         // keep their settings, work orders and history. Runs before anything reads.
         if (!AppPaths.IsDemoProfile) SettingsService.MigrateLegacyAppData();
-        Settings = new SettingsService();
+        Settings = new SettingsService(gameState: GameState);
         // Demo isolation includes the Game.log source; see DemoProfile.PinGameLogPath.
         if (AppPaths.IsDemoProfile)
             Settings.Current.GameLogPath = DemoProfile.PinGameLogPath(Settings.Current.GameLogPath, AppPaths.Root);
