@@ -23,12 +23,19 @@ public sealed class LocationTracker : IDisposable
     private readonly bool _ownsFeed;
     private GameLogSubscription? _sub;
 
-    public LocationTracker(GameLogFeed? feed = null)
+    public LocationTracker(GameLogFeed? feed = null, GameState? gameState = null)
     {
         _feed = feed ?? new GameLogFeed();
         _ownsFeed = feed is null;
+        GameState = gameState ?? new GameState();
         _sub = _feed.Subscribe(Ingest, includeReplay: true);
     }
+
+    /// <summary>
+    /// Shared operational state this tracker publishes into. Exposed so the composition root can
+    /// give the same instance to read-side consumers while preserving the inherited constructor.
+    /// </summary>
+    public GameState GameState { get; }
 
     public string? LastKnownLocation { get; private set; }
 
@@ -54,7 +61,7 @@ public sealed class LocationTracker : IDisposable
 
     // True when LastKnownLocation came from a JURISDICTION crossing rather than a real place
     // signal (live pass, 2026-08-01: the LOCATION chip read "Crusader Industries"
-    // at Crusader - a jurisdiction names whose SPACE you are in, not where you are). Stored so
+    // at Crusader - a jurisdiction names whose SPACE you are in, not where you stand). Stored so
     // display surfaces can say so instead of dressing an area up as a location; the value itself
     // still stands, since a coarse reading beats none.
     public bool LastKnownIsJurisdiction { get; private set; }
@@ -87,6 +94,7 @@ public sealed class LocationTracker : IDisposable
             if (LocationLogParser.ParseInventoryTransitionUtc(raw) is { } seenUtc)
             {
                 LastSeenUtc = seenUtc;
+                PublishGameStateLocation();
                 Changed?.Invoke();
             }
         }
@@ -113,6 +121,12 @@ public sealed class LocationTracker : IDisposable
         LastKnownRawToken = place;
         LastKnownIsJurisdiction = kind == "jurisdiction";
         LastSeenUtc = seenUtc;
+
+        // Publish the complete immutable snapshot even when the normalized place did not move.
+        // Repeated evidence still refreshes SeenUtc (and can carry a more precise raw/UEX token),
+        // while the inherited Changed event below deliberately remains transition-only.
+        PublishGameStateLocation();
+
         if (!moved) return;
         var suffix = string.Equals(display, place, StringComparison.Ordinal)
             ? $"(source: {kind})"
@@ -120,6 +134,14 @@ public sealed class LocationTracker : IDisposable
         Logger.Info($"[WHERE] location updated: {display} {suffix}");
         Changed?.Invoke();
     }
+
+    private void PublishGameStateLocation()
+        => GameState.PublishLocation(new GameLocationState(
+            LastKnownLocation,
+            LastKnownUexLocation,
+            LastKnownRawToken,
+            LastKnownIsJurisdiction,
+            LastSeenUtc));
 
     public void Dispose()
     {
