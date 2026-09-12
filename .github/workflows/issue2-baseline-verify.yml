@@ -34,29 +34,35 @@ jobs:
       - name: Smoke-start published application
         shell: pwsh
         run: |
-          $env:APPDATA = Join-Path $env:RUNNER_TEMP "navlink-smoke/AppData/Roaming"
-          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP "navlink-smoke/AppData/Local"
-          New-Item -ItemType Directory -Force -Path $env:APPDATA,$env:LOCALAPPDATA | Out-Null
+          # Nexus resolves its profile from Environment.SpecialFolder.ApplicationData. On hosted
+          # Windows runners that value may be backed by the user profile rather than a process-level
+          # APPDATA override, so discover the same special-folder path the application sees.
+          $roaming = [Environment]::GetFolderPath([Environment+SpecialFolder]::ApplicationData)
+          $demoRoot = Join-Path $roaming "NexusApp_demo"
+          $logPath = Join-Path $demoRoot "logs/nexus.log"
+          Write-Host "ApplicationData resolves to: $roaming"
+          Write-Host "Expected demo log: $logPath"
+
+          # Demo profile is disposable and isolated from any normal Nexus profile on the runner.
+          if (Test-Path $demoRoot) { Remove-Item $demoRoot -Recurse -Force -ErrorAction SilentlyContinue }
 
           $exe = (Resolve-Path "publish_out/NexusApp.exe").Path
           $proc = Start-Process -FilePath $exe -ArgumentList "--demo-profile" -PassThru
 
           try {
             $deadline = (Get-Date).AddSeconds(20)
-            $log = $null
             $text = ""
             do {
               Start-Sleep -Milliseconds 500
               if ($proc.HasExited) {
                 throw "Published app exited during startup with code $($proc.ExitCode)"
               }
-              $log = Get-ChildItem -Path $env:APPDATA -Filter nexus.log -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-              if ($log) { $text = Get-Content $log.FullName -Raw -ErrorAction SilentlyContinue }
+              if (Test-Path $logPath) { $text = Get-Content $logPath -Raw -ErrorAction SilentlyContinue }
             } until (($text -match '\[MAP\] geometry catalog loaded') -or (Get-Date) -ge $deadline)
 
-            if (-not $log) { throw "Application stayed running, but no nexus.log was created in the isolated profile" }
+            if (-not (Test-Path $logPath)) { throw "Application stayed running, but no nexus.log was created at the application-resolved demo profile path" }
             Write-Host "--- startup log ---"
-            Get-Content $log.FullName | Select-Object -Last 120
+            Get-Content $logPath | Select-Object -Last 120
             Write-Host "--- end startup log ---"
 
             if ($text -notmatch '\[WIN\] Nexus .* starting') { throw "Startup marker missing" }
