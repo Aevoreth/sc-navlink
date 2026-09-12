@@ -4,12 +4,11 @@ namespace NexusApp.Services.Map;
 
 /// <summary>
 /// "Where is the player, and how far is that from X." One small read-only seam over the geometry
-/// catalog and the Game.log location timeline, so any surface can ask - before this, App.Locations
-/// was read by exactly two views and every other page was position-blind even though the data was
-/// sitting in memory.
+/// catalog and shared GameState, so any surface can ask without owning a second copy of live
+/// operational state.
 ///
-/// Deliberately holds NO state of its own and caches nothing: LocationTracker is the single source
-/// of truth and updates on its own schedule, so every property here reads through on each call. That
+/// Deliberately holds NO state of its own and caches nothing: GameState is the single source of
+/// truth and updates on its own schedule, so every property here reads through on each call. That
 /// keeps this correct without a subscription, an invalidation rule, or a stale-cache bug.
 ///
 /// <para>Current == null is a FIRST-CLASS answer meaning "we do not know", not an error. It is the
@@ -21,47 +20,62 @@ namespace NexusApp.Services.Map;
 public sealed class PlayerPlace
 {
     private readonly MapCatalog _map;
-    private readonly LocationTracker _locations;
+    private readonly GameState _state;
 
-    public PlayerPlace(MapCatalog map, LocationTracker locations)
+    public PlayerPlace(MapCatalog map, GameState state)
     {
-        _map = map;
-        _locations = locations;
+        _map = map ?? throw new ArgumentNullException(nameof(map));
+        _state = state ?? throw new ArgumentNullException(nameof(state));
+    }
+
+    // Compatibility constructor for the inherited composition root. It deliberately extracts the
+    // shared state store once; all reads below are from GameState, not LocationTracker.
+    public PlayerPlace(MapCatalog map, LocationTracker locations)
+        : this(map, locations?.GameState ?? throw new ArgumentNullException(nameof(locations)))
+    {
     }
 
     /// <summary>The map object the player was last seen at, or null when nothing resolves. Resolved
     /// through the catalog's raw-token tier, so gateway names that repeat across systems land in the
     /// right one.</summary>
-    public MapObject? Current => _map.ResolvePlayerLocation(_locations.LastKnownLocation, _locations.LastKnownRawToken);
+    public MapObject? Current
+    {
+        get
+        {
+            var location = _state.Location;
+            return _map.ResolvePlayerLocation(location.Label, location.RawToken);
+        }
+    }
 
     /// <summary>The display name the log gave, even when it does not resolve to an object - a
     /// jurisdiction like "Rough and Ready", or a gateway with no captured token. Callers that want to
     /// SAY where the player is should prefer this; callers that want to MEASURE need
     /// <see cref="MeasureFrom"/>, and callers that want to POSITION a marker need Current.</summary>
-    public string? Label => _locations.LastKnownLocation;
+    public string? Label => _state.Location.Label;
 
     /// <summary>The measuring read (offline-distances ruling, 2026-08-17): the player's place while
-    /// a session is live, null when it is not. LastKnownLocation never clears, so Current keeps
-    /// resolving after the game exits - honest for placing a grey last-known marker, dishonest as
-    /// the origin of a distance, an ordering, or a proximity tier. Every distance call site folds
-    /// the process probe (App.GameLogFeed.IsSessionLive) through this one rule, so a withheld
-    /// distance falls out of the existing null-player silence path rather than a second code path.
-    /// Kept pure (the probe is an argument, not a dependency) like StatusChips' folds.</summary>
+    /// a session is live, null when it is not. Last-known location intentionally survives the live
+    /// session, so Current can keep resolving after the game exits - honest for placing a grey
+    /// last-known marker, dishonest as the origin of a distance, an ordering, or a proximity tier.
+    /// Every distance call site folds the process probe (App.GameLogFeed.IsSessionLive) through this
+    /// one rule, so a withheld distance falls out of the existing null-player silence path rather
+    /// than a second code path. Kept pure (the probe is an argument, not a dependency) like
+    /// StatusChips' folds.</summary>
     public MapObject? MeasureFrom(bool sessionLive) => sessionLive ? Current : null;
 
     /// <summary>True when <see cref="Label"/> is a JURISDICTION reading - whose space the player
     /// crossed into, not a place they are standing (2026-08-01: "Crusader Industries" rendered as
     /// a location on the LOCATION chip). Display surfaces should qualify these, not hide them: a
     /// coarse reading is still the freshest fact available.</summary>
-    public bool LabelIsJurisdiction => _locations.LastKnownIsJurisdiction;
+    public bool LabelIsJurisdiction => _state.Location.IsJurisdiction;
 
     /// <summary>When that reading was taken. The timeline is sparse and boundary-driven by nature, so
     /// anything shown to the user should be dated rather than implied to be live.</summary>
-    public DateTime? SeenUtc => _locations.LastSeenUtc;
+    public DateTime? SeenUtc => _state.Location.SeenUtc;
 
     /// <summary>The UEX Location string for the current place, when one is known. This is the hint
     /// that lets a UEX lookup succeed at a gateway whose in-game name UEX does not use.</summary>
-    public string? UexLocation => _locations.LastKnownUexLocation;
+    public string? UexLocation => _state.Location.UexLocation;
 
     /// <summary>The star system the player is in, or null when unknown.</summary>
     public string? System => Current?.System;
