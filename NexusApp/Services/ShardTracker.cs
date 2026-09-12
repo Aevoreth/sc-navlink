@@ -20,10 +20,12 @@ public sealed class ShardTracker : IDisposable
     public ShardTracker(Func<IEnumerable<ShardSession>> loadPersisted,
                         Action<IReadOnlyList<ShardSession>> savePersisted,
                         GameLogFeed? feed = null,
-                        Func<string>? channelTag = null)
+                        Func<string>? channelTag = null,
+                        GameState? gameState = null)
     {
         _save = savePersisted;
         _channelTag = channelTag;
+        GameState = gameState;
         _history.AddRange(loadPersisted() ?? Enumerable.Empty<ShardSession>());
         _feed = feed ?? new GameLogFeed();
         _ownsFeed = feed is null;
@@ -33,6 +35,12 @@ public sealed class ShardTracker : IDisposable
         _sub = _feed.Subscribe(Ingest, includeReplay: true,
             onLogReset: () => _staleReplay = false, onStarted: OnFeedStarted);
     }
+
+    /// <summary>
+    /// Shared operational state this tracker publishes the current-shard slice into. Null when a
+    /// test or inherited constructor did not supply a store.
+    /// </summary>
+    public GameState? GameState { get; }
 
     private bool _onShard;      // true while in the PU: set by a <Join PU>, cleared by a leave marker
     private bool _staleReplay;  // replaying a cold leftover log: record history, never claim on-shard
@@ -88,7 +96,13 @@ public sealed class ShardTracker : IDisposable
         // history and slides into RECENT - until the next join.
         if (IsLeaveLine(raw))
         {
-            if (_onShard) { _onShard = false; Logger.Info("[SHARD] left the shard"); Changed?.Invoke(); }
+            if (_onShard)
+            {
+                _onShard = false;
+                Logger.Info("[SHARD] left the shard");
+                PublishGameStateShard();
+                Changed?.Invoke();
+            }
             return;
         }
 
@@ -100,7 +114,12 @@ public sealed class ShardTracker : IDisposable
         // Re-joined the SAME shard (e.g. after a brief disconnect): just mark us back on it.
         if (_history.Count > 0 && _history[0].ShardId == s.ShardId)
         {
-            if (!_onShard && !_staleReplay) { _onShard = true; Changed?.Invoke(); }
+            if (!_onShard && !_staleReplay)
+            {
+                _onShard = true;
+                PublishGameStateShard();
+                Changed?.Invoke();
+            }
             return;
         }
 
@@ -110,7 +129,23 @@ public sealed class ShardTracker : IDisposable
         _save(_history);
         Logger.Info($"[SHARD] joined {s.Region} shard {s.Instance} ({s.ShardId})"
             + (s.Channel is "" or "LIVE" ? "" : $" [{s.Channel}]"));
+        PublishGameStateShard();
         Changed?.Invoke();
+    }
+
+    private void PublishGameStateShard()
+    {
+        if (GameState is null) return;
+        var current = Current;
+        GameState.PublishShard(current is null
+            ? GameShardState.Empty
+            : new GameShardState(
+                true,
+                current.ShardId,
+                current.Region,
+                current.Instance,
+                current.Channel,
+                current.JoinedAt));
     }
 
     public void Dispose()

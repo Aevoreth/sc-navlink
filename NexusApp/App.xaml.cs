@@ -406,7 +406,7 @@ public partial class App : Application
         // ONE Game.log tail for the whole app: the blueprint session, the haul tracker and the
         // shard tracker all consume it, so the file is opened, read and parsed once per tick (and
         // the game's process presence probed once) instead of three times over.
-        GameLogFeed = new GameLogFeed { PreferredPath = Settings.Current.GameLogPath };
+        GameLogFeed = new GameLogFeed(GameState) { PreferredPath = Settings.Current.GameLogPath };
 
         // BETA Game.log blueprint watch. Created after seed data loads (the importer needs
         // the blueprint name list). One instance app-wide, shared by the standalone monitor
@@ -440,8 +440,9 @@ public partial class App : Application
             () => Settings.Current.RecentShards,
             list => { Settings.Current.RecentShards = list.ToList(); Settings.Save(); },
             GameLogFeed,
-            channelTag: () => GameChannels.FolderName(GameLogFeed.ActiveChannel));
-        Locations = new LocationTracker(GameLogFeed);
+            channelTag: () => GameChannels.FolderName(GameLogFeed.ActiveChannel),
+            gameState: GameState);
+        Locations = new LocationTracker(GameLogFeed, GameState);
         Profit = new ProfitTracker(GameLogFeed);
         Wallet = new WalletTracker(Profit, GameLogFeed);
         AutoLoad = new AutoLoadTracker(Profit);
