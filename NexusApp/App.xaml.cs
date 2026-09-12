@@ -444,7 +444,7 @@ public partial class App : Application
             gameState: GameState);
         Locations = new LocationTracker(GameLogFeed, GameState);
         Profit = new ProfitTracker(GameLogFeed);
-        Wallet = new WalletTracker(Profit, GameLogFeed);
+        Wallet = new WalletTracker(Profit, GameLogFeed, gameState: GameState);
         AutoLoad = new AutoLoadTracker(Profit);
         // Kiosk box sizes (2026-08-10): the planner snaps trips to what a terminal can actually
         // sell, and UEX ships one container_sizes list per commodity that does not vary by
