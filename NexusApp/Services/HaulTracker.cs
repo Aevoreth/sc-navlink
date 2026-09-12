@@ -21,12 +21,19 @@ public sealed class HaulTracker : IDisposable
     // Attaches with the replay appetite: every start of the tail replays the current Game.log from
     // the top, so an app restart mid-session rebuilds active hauls (parsing is idempotent: markers
     // dedupe by objectiveId).
-    public HaulTracker(GameLogFeed? feed = null)
+    public HaulTracker(GameLogFeed? feed = null, GameState? gameState = null)
     {
         _feed = feed ?? new GameLogFeed();
         _ownsFeed = feed is null;
+        GameState = gameState;
         _sub = _feed.Subscribe(Ingest, includeReplay: true, onLogReset: Reset);
     }
+
+    /// <summary>
+    /// Shared operational state this tracker publishes the hauling slice into. Null when a test
+    /// or inherited constructor did not supply a store.
+    /// </summary>
+    public GameState? GameState { get; }
 
     public IReadOnlyList<Haul> AllHauls => _order;
     public IReadOnlyList<Haul> ActiveHauls => _order.FindAll(h => h.IsActive);
@@ -54,7 +61,7 @@ public sealed class HaulTracker : IDisposable
         {
             _order.Remove(h);
             Logger.Info($"[HAUL] removed haul {h.Company}");
-            Changed?.Invoke();
+            RaiseChanged();
         }
     }
 
@@ -63,7 +70,7 @@ public sealed class HaulTracker : IDisposable
         _byId.Clear();
         _order.Clear();
         _pendingByOrg.Clear();
-        Changed?.Invoke();
+        RaiseChanged();
     }
 
     // Groups incomplete legs of all active hauls by location: where to load (Pickups) and
@@ -163,7 +170,7 @@ public sealed class HaulTracker : IDisposable
             ah.RouteTitle = accept.Title;
             TryApplyPending(ah);
             ah.PickupName = DerivePickup(accept.Title);
-            Changed?.Invoke();
+            RaiseChanged();
             return;
         }
 
@@ -175,7 +182,7 @@ public sealed class HaulTracker : IDisposable
             {
                 leg.Completed = true;
                 Logger.Info($"[HAUL] leg complete: {ch.Company} {leg.Role} {leg.Commodity}");
-                Changed?.Invoke();
+                RaiseChanged();
             }
             return;
         }
@@ -186,7 +193,7 @@ public sealed class HaulTracker : IDisposable
             eh.Outcome = end.Outcome;
             Logger.Info($"[HAUL] mission ended: {eh.Company} {eh.Topology} -> {end.Outcome}");
             HaulEnded?.Invoke(eh);
-            Changed?.Invoke();
+            RaiseChanged();
         }
     }
 
@@ -218,7 +225,7 @@ public sealed class HaulTracker : IDisposable
             });
         if (!existed) Logger.Info($"[HAUL] mission accepted: {h.Company} {h.Topology}");
         TryApplyPending(h);   // the haul's company is now known; apply any contract scanned before it appeared
-        Changed?.Invoke();
+        RaiseChanged();
     }
 
     private void ApplyDeliver(DeliverInfo d)
@@ -233,7 +240,7 @@ public sealed class HaulTracker : IDisposable
         leg.Commodity = d.Commodity;
         leg.TargetScu = d.TargetScu;
         leg.Destination = d.Destination;
-        Changed?.Invoke();
+        RaiseChanged();
     }
 
     // Best-effort: the left side of an "A > B" route title is the pickup location. Flavor titles
@@ -266,7 +273,7 @@ public sealed class HaulTracker : IDisposable
         if (target is null) return;   // ambiguous and cargo can't separate them -> skip
 
         ApplyAndNotify(target, d);
-        Changed?.Invoke();
+        RaiseChanged();
     }
 
     // Several active hauls share a contractor (e.g. three Red Wind hauls). Place the scanned contract:
@@ -339,6 +346,51 @@ public sealed class HaulTracker : IDisposable
         string? hit = null;
         foreach (var k in _pendingByOrg.Keys) if (k.Contains(comp)) { hit = k; break; }
         if (hit != null) { ApplyAndNotify(h, _pendingByOrg[hit]); _pendingByOrg.Remove(hit); }
+    }
+
+    private void RaiseChanged()
+    {
+        PublishGameStateHauling();
+        Changed?.Invoke();
+    }
+
+    private void PublishGameStateHauling()
+    {
+        if (GameState is null) return;
+        if (_order.Count == 0)
+        {
+            GameState.PublishHauling(GameHaulingState.Empty);
+            return;
+        }
+
+        var hauls = new GameHaulSummary[_order.Count];
+        for (int i = 0; i < _order.Count; i++)
+        {
+            var h = _order[i];
+            hauls[i] = new GameHaulSummary(h.MissionId, h.Company, h.IsActive, h.Outcome);
+        }
+
+        var con = BuildConsolidation();
+        GameState.PublishHauling(new GameHaulingState(
+            hauls,
+            FlattenStops(con.Pickups),
+            FlattenStops(con.Dropoffs)));
+    }
+
+    private static GameHaulStop[] FlattenStops(List<ConsolidationStop> stops)
+    {
+        var count = 0;
+        foreach (var stop in stops) count += stop.Items.Count;
+        if (count == 0) return Array.Empty<GameHaulStop>();
+
+        var items = new GameHaulStop[count];
+        var i = 0;
+        foreach (var stop in stops)
+        {
+            foreach (var item in stop.Items)
+                items[i++] = new GameHaulStop(stop.Location, item.Commodity, item.Scu, item.MissionId);
+        }
+        return items;
     }
 
     public void Dispose()
