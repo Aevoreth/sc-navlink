@@ -149,17 +149,38 @@ public partial class MainViewModel : ObservableObject
         bool isNewScan = ScanHistory.Count == 0 || ScanHistory[0].Rs != rs;
         RebuildFilteredResults();
 
-        if (!addToHistory || !isNewScan) return;
+        if (addToHistory && isNewScan)
+        {
+            var (topName, matchKind) = ScanClassification.Summarize(matches);
+            ScanHistory.Insert(0, new ScanHistoryEntry(rs, topName, matchKind)
+                { IsInCart = cart.Contains(topName) });
+            while (ScanHistory.Count > 20) ScanHistory.RemoveAt(ScanHistory.Count - 1);
+            RebuildFilteredHistory();
+        }
 
-        var (topName, matchKind) = ScanClassification.Summarize(matches);
-        ScanHistory.Insert(0, new ScanHistoryEntry(rs, topName, matchKind)
-            { IsInCart = cart.Contains(topName) });
-        while (ScanHistory.Count > 20) ScanHistory.RemoveAt(ScanHistory.Count - 1);
-        RebuildFilteredHistory();
+        PublishMiningScan(rs);
     }
 
     private HashSet<string> CartNames() =>
         ShoppingList.Select(x => x.ResourceName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    private void PublishMiningScan(int rs)
+    {
+        var hits = ScanResults.Select(m => new GameMiningHit(
+            m.Resource.Name, m.Resource.Method, m.Nodes, m.IsExact, m.ErrorPct)).ToArray();
+        App.GameState.PublishMining(
+            MiningScanProjection.FromScan(rs, hits, SnapshotMiningHistory(), DateTime.UtcNow));
+    }
+
+    private GameMiningHistoryEntry[] SnapshotMiningHistory() =>
+        ScanHistory.Select(e => new GameMiningHistoryEntry(e.Rs, e.TopResource, MapMiningKind(e.Match))).ToArray();
+
+    private static GameMiningMatchKind MapMiningKind(MatchKind kind) => kind switch
+    {
+        MatchKind.Exact => GameMiningMatchKind.Exact,
+        MatchKind.Close => GameMiningMatchKind.Close,
+        _ => GameMiningMatchKind.None,
+    };
 
     private void RebuildFilteredHistory()
     {
@@ -227,6 +248,7 @@ public partial class MainViewModel : ObservableObject
         ScanResults.Clear();
         StatusText = "";
         RebuildFilteredResults();
+        App.GameState.PublishMining(MiningScanProjection.ClearedScan(SnapshotMiningHistory()));
     }
 
     [RelayCommand]
@@ -234,6 +256,7 @@ public partial class MainViewModel : ObservableObject
     {
         ScanHistory.Clear();
         RebuildFilteredHistory();
+        App.GameState.PublishMining(MiningScanProjection.ClearedHistory(App.GameState.Mining.LastScan));
     }
 
     [RelayCommand]
