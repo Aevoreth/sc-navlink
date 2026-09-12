@@ -1,0 +1,76 @@
+name: Issue 2 baseline verification
+
+on:
+  push:
+    branches:
+      - fix/issue-2-sct-dispose-test
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-2025-vs2026
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/issue-2-sct-dispose-test
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: ./global.json
+
+      - name: Publish self-contained win-x64
+        shell: pwsh
+        run: |
+          dotnet publish NexusApp/NexusApp.csproj -c Release -r win-x64 --self-contained true -o publish_out -p:Version=0.0.0
+          if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed ($LASTEXITCODE)" }
+          if (-not (Test-Path publish_out/NexusApp.exe)) { throw "NexusApp.exe was not produced" }
+          if (-not (Test-Path publish_out/coreclr.dll)) { throw "coreclr.dll missing: output does not look self-contained" }
+          if (-not (Test-Path publish_out/hostfxr.dll)) { throw "hostfxr.dll missing: output does not look self-contained" }
+          Write-Host "Self-contained publish verified."
+          Get-Item publish_out/NexusApp.exe | Format-List Name,Length,LastWriteTime
+
+      - name: Smoke-start published application
+        shell: pwsh
+        run: |
+          $env:APPDATA = Join-Path $env:RUNNER_TEMP "navlink-smoke/AppData/Roaming"
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP "navlink-smoke/AppData/Local"
+          New-Item -ItemType Directory -Force -Path $env:APPDATA,$env:LOCALAPPDATA | Out-Null
+
+          $exe = (Resolve-Path "publish_out/NexusApp.exe").Path
+          $proc = Start-Process -FilePath $exe -ArgumentList "--demo-profile" -PassThru
+
+          try {
+            $deadline = (Get-Date).AddSeconds(20)
+            $log = $null
+            $text = ""
+            do {
+              Start-Sleep -Milliseconds 500
+              if ($proc.HasExited) {
+                throw "Published app exited during startup with code $($proc.ExitCode)"
+              }
+              $log = Get-ChildItem -Path $env:APPDATA -Filter nexus.log -File -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+              if ($log) { $text = Get-Content $log.FullName -Raw -ErrorAction SilentlyContinue }
+            } until (($text -match '\[MAP\] geometry catalog loaded') -or (Get-Date) -ge $deadline)
+
+            if (-not $log) { throw "Application stayed running, but no nexus.log was created in the isolated profile" }
+            Write-Host "--- startup log ---"
+            Get-Content $log.FullName | Select-Object -Last 120
+            Write-Host "--- end startup log ---"
+
+            if ($text -notmatch '\[WIN\] Nexus .* starting') { throw "Startup marker missing" }
+            if ($text -notmatch '\[MAP\] geometry catalog loaded') { throw "Map/data composition-root marker missing" }
+            if ($text -notmatch '\[GameLog\] session tracking \+ auto-track always on') { throw "GameLog/session initialization marker missing" }
+            Write-Host "Application startup smoke check passed."
+          }
+          finally {
+            if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+          }
+
+      - name: Upload verified publish
+        uses: actions/upload-artifact@v7
+        with:
+          name: issue2-win-x64-self-contained
+          path: publish_out/
+          retention-days: 7
