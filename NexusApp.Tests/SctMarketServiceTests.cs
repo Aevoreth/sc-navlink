@@ -211,10 +211,12 @@ public class SctMarketServiceTests : IDisposable
 
         Assert.True(sw.Elapsed >= unwindDelay - TimeSpan.FromMilliseconds(50),
             $"Dispose returned after {sw.Elapsed.TotalMilliseconds:0}ms, expected to block for close to {unwindDelay.TotalMilliseconds:0}ms");
-        Assert.True(refresh.IsCompleted);
         Assert.False(File.Exists(snapshotPath));   // a cancelled cycle never writes a snapshot
         Assert.False(svc.FetchInProgress);
-        await refresh;
+        // Dispose waits for the service-side drain latch. The outer async task may transition to
+        // Completed immediately afterward, so await it with a short bound rather than sampling
+        // IsCompleted in that scheduler-sensitive gap.
+        await refresh.WaitAsync(TimeSpan.FromSeconds(1));
     }
 
     // --- A failed or cancelled cycle must not replace good data with an empty snapshot ---------
