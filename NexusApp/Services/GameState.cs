@@ -119,6 +119,76 @@ public sealed record GameWalletState(
     public static GameWalletState Empty { get; } = new(false, null, null, null, GameWalletProvenance.None, 0);
 }
 
+/// <summary>How a decoded RS scan classified its top resource.</summary>
+public enum GameMiningMatchKind { None, Close, Exact }
+
+/// <summary>One unfiltered RS decode hit. Cart and filter state stay in the view model.</summary>
+public sealed record GameMiningHit(
+    string ResourceName,
+    string Method,
+    int Nodes,
+    bool IsExact,
+    double ErrorPct);
+
+/// <summary>The last decoded RS value and its unfiltered hits.</summary>
+public sealed record GameMiningScan(
+    int Rs,
+    string TopResource,
+    GameMiningMatchKind Kind,
+    DateTime SeenUtc,
+    IReadOnlyList<GameMiningHit> Hits)
+{
+    public bool Equals(GameMiningScan? other) =>
+        other is not null
+        && Rs == other.Rs
+        && TopResource == other.TopResource
+        && Kind == other.Kind
+        && SeenUtc == other.SeenUtc
+        && Hits.SequenceEqual(other.Hits);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Rs);
+        hash.Add(TopResource);
+        hash.Add(Kind);
+        hash.Add(SeenUtc);
+        foreach (var hit in Hits) hash.Add(hit);
+        return hash.ToHashCode();
+    }
+}
+
+/// <summary>One recent-scan row, unfiltered.</summary>
+public sealed record GameMiningHistoryEntry(int Rs, string TopResource, GameMiningMatchKind Kind);
+
+/// <summary>
+/// Immutable mining-scan slice published into <see cref="GameState"/>.
+///
+/// This is decoded RS context, not scanner mechanics or UI filter/selection state.
+/// A log reset does not clear the last scan. <c>MainViewModel</c> still owns the WPF
+/// collections and publishes here after a decode or clear.
+/// </summary>
+public sealed record GameMiningState(
+    GameMiningScan? LastScan,
+    IReadOnlyList<GameMiningHistoryEntry> Recent)
+{
+    public static GameMiningState Empty { get; } = new(null, Array.Empty<GameMiningHistoryEntry>());
+    public bool HasScan => LastScan is not null;
+
+    public bool Equals(GameMiningState? other) =>
+        other is not null
+        && Equals(LastScan, other.LastScan)
+        && Recent.SequenceEqual(other.Recent);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(LastScan);
+        foreach (var entry in Recent) hash.Add(entry);
+        return hash.ToHashCode();
+    }
+}
+
 /// <summary>
 /// App-lifetime observable operational state for SC-navLink.
 ///
@@ -135,6 +205,7 @@ public sealed class GameState
     private GameShardState _shard = GameShardState.Empty;
     private GameHaulingState _hauling = GameHaulingState.Empty;
     private GameWalletState _wallet = GameWalletState.Empty;
+    private GameMiningState _mining = GameMiningState.Empty;
 
     /// <summary>Latest location snapshot. The returned record is immutable and safe to retain.</summary>
     public GameLocationState Location
@@ -181,6 +252,15 @@ public sealed class GameState
         }
     }
 
+    /// <summary>Latest mining-scan snapshot. The returned record is immutable and safe to retain.</summary>
+    public GameMiningState Mining
+    {
+        get
+        {
+            lock (_gate) return _mining;
+        }
+    }
+
     /// <summary>Raised when any shared-state slice changes.</summary>
     public event Action? Changed;
 
@@ -198,6 +278,9 @@ public sealed class GameState
 
     /// <summary>Raised when the wallet snapshot changes.</summary>
     public event Action? WalletChanged;
+
+    /// <summary>Raised when the mining-scan snapshot changes.</summary>
+    public event Action? MiningChanged;
 
     /// <summary>
     /// Publish the result of the location domain service. Internal so ordinary consumers cannot
@@ -221,6 +304,10 @@ public sealed class GameState
     /// <summary>Publish the result of the wallet domain service.</summary>
     internal void PublishWallet(GameWalletState wallet)
         => Publish(ref _wallet, wallet, () => WalletChanged);
+
+    /// <summary>Publish the result of the mining-scan decode path.</summary>
+    internal void PublishMining(GameMiningState mining)
+        => Publish(ref _mining, mining, () => MiningChanged);
 
     private void Publish<T>(ref T field, T value, Func<Action?> sliceEvent) where T : class
     {
