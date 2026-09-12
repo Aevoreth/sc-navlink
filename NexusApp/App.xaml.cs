@@ -435,7 +435,7 @@ public partial class App : Application
         // No toast on HaulEnded: the startup replay re-raises last session's ended hauls, which
         // popped stale "Haul Abandoned" toasts on every launch. The Hauling tab and [HAUL] log
         // lines carry the outcome instead.
-        Hauls = new HaulTracker(GameLogFeed);
+        Hauls = new HaulTracker(GameLogFeed, GameState);
         Shards = new ShardTracker(
             () => Settings.Current.RecentShards,
             list => { Settings.Current.RecentShards = list.ToList(); Settings.Save(); },

@@ -1,3 +1,5 @@
+using NexusApp.Models;
+
 namespace NexusApp.Services;
 
 /// <summary>
@@ -51,6 +53,51 @@ public sealed record GameShardState(
     public static GameShardState Empty { get; } = new(false, null, null, null, null, null);
 }
 
+/// <summary>One incomplete pickup or dropoff stop projected from the haul consolidation.</summary>
+public sealed record GameHaulStop(string Location, string Commodity, int Scu, string MissionId);
+
+/// <summary>Immutable identity of one haul. The tracker remains the owner of mutable leg detail.</summary>
+public sealed record GameHaulSummary(
+    string MissionId,
+    string Company,
+    bool IsActive,
+    HaulOutcome Outcome);
+
+/// <summary>
+/// Immutable hauling slice published into <see cref="GameState"/>.
+///
+/// This is contract/objective state, not a cargo inventory. Active hauls and their incomplete
+/// consolidated stops are projected from <c>HaulTracker</c>. The tracker still clears on log
+/// reset, PU exit, and shard change.
+/// </summary>
+public sealed record GameHaulingState(
+    IReadOnlyList<GameHaulSummary> Hauls,
+    IReadOnlyList<GameHaulStop> Pickups,
+    IReadOnlyList<GameHaulStop> Dropoffs)
+{
+    public static GameHaulingState Empty { get; } = new(
+        Array.Empty<GameHaulSummary>(),
+        Array.Empty<GameHaulStop>(),
+        Array.Empty<GameHaulStop>());
+
+    public bool HasActiveHauls => Hauls.Any(h => h.IsActive);
+
+    public bool Equals(GameHaulingState? other) =>
+        other is not null
+        && Hauls.SequenceEqual(other.Hauls)
+        && Pickups.SequenceEqual(other.Pickups)
+        && Dropoffs.SequenceEqual(other.Dropoffs);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        foreach (var haul in Hauls) hash.Add(haul);
+        foreach (var stop in Pickups) hash.Add(stop);
+        foreach (var stop in Dropoffs) hash.Add(stop);
+        return hash.ToHashCode();
+    }
+}
+
 /// <summary>
 /// App-lifetime observable operational state for SC-navLink.
 ///
@@ -65,6 +112,7 @@ public sealed class GameState
     private GameLocationState _location = GameLocationState.Empty;
     private GameSessionState _session = GameSessionState.Empty;
     private GameShardState _shard = GameShardState.Empty;
+    private GameHaulingState _hauling = GameHaulingState.Empty;
 
     /// <summary>Latest location snapshot. The returned record is immutable and safe to retain.</summary>
     public GameLocationState Location
@@ -93,6 +141,15 @@ public sealed class GameState
         }
     }
 
+    /// <summary>Latest hauling snapshot. The returned record is immutable and safe to retain.</summary>
+    public GameHaulingState Hauling
+    {
+        get
+        {
+            lock (_gate) return _hauling;
+        }
+    }
+
     /// <summary>Raised when any shared-state slice changes.</summary>
     public event Action? Changed;
 
@@ -104,6 +161,9 @@ public sealed class GameState
 
     /// <summary>Raised when the shard snapshot changes.</summary>
     public event Action? ShardChanged;
+
+    /// <summary>Raised when the hauling snapshot changes.</summary>
+    public event Action? HaulingChanged;
 
     /// <summary>
     /// Publish the result of the location domain service. Internal so ordinary consumers cannot
@@ -119,6 +179,10 @@ public sealed class GameState
     /// <summary>Publish the result of the shard domain service.</summary>
     internal void PublishShard(GameShardState shard)
         => Publish(ref _shard, shard, () => ShardChanged);
+
+    /// <summary>Publish the result of the haul domain service.</summary>
+    internal void PublishHauling(GameHaulingState hauling)
+        => Publish(ref _hauling, hauling, () => HaulingChanged);
 
     private void Publish<T>(ref T field, T value, Func<Action?> sliceEvent) where T : class
     {
