@@ -68,6 +68,7 @@ public class DataService : IDisposable
         MigrateColumns();
         ApplySeed();
         PublishRefineryJobs();
+        PublishShoppingList();
     }
 
     private void CreateSchema()
@@ -849,12 +850,20 @@ public class DataService : IDisposable
         ExecSafe(nameof(AddToShoppingList),
             "INSERT INTO shopping_list VALUES (@r,@q,@u) ON CONFLICT(resource_name) DO UPDATE SET quantity=quantity+@q",
             ("@r", resourceName), ("@q", qty), ("@u", unit));
+        PublishShoppingList();
     }
 
-    public void RemoveFromShoppingList(string resourceName) =>
+    public void RemoveFromShoppingList(string resourceName)
+    {
         ExecSafe(nameof(RemoveFromShoppingList), "DELETE FROM shopping_list WHERE resource_name=@r", ("@r", resourceName));
+        PublishShoppingList();
+    }
 
-    public void ClearShoppingList() => ExecSafe(nameof(ClearShoppingList), "DELETE FROM shopping_list");
+    public void ClearShoppingList()
+    {
+        ExecSafe(nameof(ClearShoppingList), "DELETE FROM shopping_list");
+        PublishShoppingList();
+    }
 
     public void ClearWorkOrders()
     {
@@ -866,6 +875,12 @@ public class DataService : IDisposable
     {
         if (GameState is null) return;
         GameState.PublishRefinery(RefineryJobProjection.FromOrders(GetWorkOrders()));
+    }
+
+    private void PublishShoppingList()
+    {
+        if (GameState is null) return;
+        GameState.PublishShopping(GoalsProjection.ShoppingFrom(GetShoppingList()));
     }
 
     // ── Pinning ──────────────────────────────────────────────────────────────

@@ -39,14 +39,22 @@ public class SettingsService
 
     public AppSettings Current { get; private set; }
 
+    /// <summary>
+    /// Shared operational state this service publishes owned-blueprint goals into. Null when a
+    /// test or inherited constructor did not supply a store.
+    /// </summary>
+    public GameState? GameState { get; }
+
     /// <param name="settingsPath">
     /// Override the settings file location. Defaults to %AppData%\NexusApp\settings.json.
     /// Used by tests to point at a temp file instead of the real user profile.
     /// </param>
-    public SettingsService(string? settingsPath = null)
+    public SettingsService(string? settingsPath = null, GameState? gameState = null)
     {
         _path = settingsPath ?? DefaultPath;
+        GameState = gameState;
         Current = Load();
+        PublishOwnedBlueprints();
     }
 
     private AppSettings Load()
@@ -212,6 +220,7 @@ public class SettingsService
             Current.OwnedBlueprints.RemoveAll(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
         }
         Save();
+        PublishOwnedBlueprints();
     }
 
     // Bulk-mark owned with a single disk write - used by the Game.log importer so a
@@ -225,7 +234,11 @@ public class SettingsService
             if (string.IsNullOrWhiteSpace(name)) continue;
             if (OwnedSet.Add(name)) { Current.OwnedBlueprints.Add(name); added++; }
         }
-        if (added > 0) Save();
+        if (added > 0)
+        {
+            Save();
+            PublishOwnedBlueprints();
+        }
         return added;
     }
 
@@ -234,6 +247,13 @@ public class SettingsService
         Current.OwnedBlueprints.Clear();
         _ownedSet = null;   // force the lookup set to rebuild from the now-empty list
         Save();
+        PublishOwnedBlueprints();
+    }
+
+    private void PublishOwnedBlueprints()
+    {
+        if (GameState is null) return;
+        GameState.PublishOwnedBlueprints(GoalsProjection.OwnedFrom(Current.OwnedBlueprints));
     }
 
     public void ClearPinnedResources()

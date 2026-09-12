@@ -233,6 +233,44 @@ public sealed record GameRefineryState(IReadOnlyList<GameRefineryJob> Jobs)
     }
 }
 
+/// <summary>One persisted shopping-list row. Search text and cart-button UI stay out.</summary>
+public sealed record GameShoppingItem(string ResourceName, double Quantity, string Unit);
+
+/// <summary>
+/// Immutable durable-goals slice published into <see cref="GameState"/>.
+///
+/// Shopping items come from <c>DataService</c>; owned blueprint names come from
+/// <c>SettingsService</c>. Search, selection, and <c>GameLogSession</c> session
+/// marks stay out. A log reset does not clear either list.
+/// </summary>
+public sealed record GameGoalsState(
+    IReadOnlyList<GameShoppingItem> Shopping,
+    IReadOnlyList<string> OwnedBlueprints)
+{
+    public static GameGoalsState Empty { get; } = new(
+        Array.Empty<GameShoppingItem>(),
+        Array.Empty<string>());
+
+    public bool HasShopping => Shopping.Count > 0;
+    public bool HasOwnedBlueprints => OwnedBlueprints.Count > 0;
+
+    public bool Owns(string name) =>
+        OwnedBlueprints.Any(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
+
+    public bool Equals(GameGoalsState? other) =>
+        other is not null
+        && Shopping.SequenceEqual(other.Shopping)
+        && OwnedBlueprints.SequenceEqual(other.OwnedBlueprints);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        foreach (var item in Shopping) hash.Add(item);
+        foreach (var name in OwnedBlueprints) hash.Add(name);
+        return hash.ToHashCode();
+    }
+}
+
 /// <summary>
 /// App-lifetime observable operational state for SC-navLink.
 ///
@@ -251,6 +289,7 @@ public sealed class GameState
     private GameWalletState _wallet = GameWalletState.Empty;
     private GameMiningState _mining = GameMiningState.Empty;
     private GameRefineryState _refinery = GameRefineryState.Empty;
+    private GameGoalsState _goals = GameGoalsState.Empty;
 
     /// <summary>Latest location snapshot. The returned record is immutable and safe to retain.</summary>
     public GameLocationState Location
@@ -315,6 +354,15 @@ public sealed class GameState
         }
     }
 
+    /// <summary>Latest durable-goals snapshot. The returned record is immutable and safe to retain.</summary>
+    public GameGoalsState Goals
+    {
+        get
+        {
+            lock (_gate) return _goals;
+        }
+    }
+
     /// <summary>Raised when any shared-state slice changes.</summary>
     public event Action? Changed;
 
@@ -338,6 +386,9 @@ public sealed class GameState
 
     /// <summary>Raised when the refinery-job snapshot changes.</summary>
     public event Action? RefineryChanged;
+
+    /// <summary>Raised when the durable-goals snapshot changes.</summary>
+    public event Action? GoalsChanged;
 
     /// <summary>
     /// Publish the result of the location domain service. Internal so ordinary consumers cannot
@@ -369,6 +420,28 @@ public sealed class GameState
     /// <summary>Publish the result of the persisted refinery work-order set.</summary>
     internal void PublishRefinery(GameRefineryState refinery)
         => Publish(ref _refinery, refinery, () => RefineryChanged);
+
+    /// <summary>Publish the full durable-goals snapshot.</summary>
+    internal void PublishGoals(GameGoalsState goals)
+        => Publish(ref _goals, goals, () => GoalsChanged);
+
+    /// <summary>Replace the shopping list while keeping currently published owned blueprints.</summary>
+    internal void PublishShopping(IReadOnlyList<GameShoppingItem> shopping)
+    {
+        ArgumentNullException.ThrowIfNull(shopping);
+        GameGoalsState next;
+        lock (_gate) next = new GameGoalsState(shopping, _goals.OwnedBlueprints);
+        Publish(ref _goals, next, () => GoalsChanged);
+    }
+
+    /// <summary>Replace owned blueprints while keeping the currently published shopping list.</summary>
+    internal void PublishOwnedBlueprints(IReadOnlyList<string> ownedBlueprints)
+    {
+        ArgumentNullException.ThrowIfNull(ownedBlueprints);
+        GameGoalsState next;
+        lock (_gate) next = new GameGoalsState(_goals.Shopping, ownedBlueprints);
+        Publish(ref _goals, next, () => GoalsChanged);
+    }
 
     private void Publish<T>(ref T field, T value, Func<Action?> sliceEvent) where T : class
     {
