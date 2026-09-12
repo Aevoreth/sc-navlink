@@ -397,7 +397,7 @@ public partial class App : Application
         // (Themes/Palette.Luxury.xaml); there is no picker and no runtime switch.
 
         base.OnStartup(e);
-        Data = new DataService();
+        Data = new DataService(GameState);
         Data.Initialize();
 
         // Blueprint Network store (separate db, survives the nexus.db reseed).

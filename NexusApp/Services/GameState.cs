@@ -189,6 +189,50 @@ public sealed record GameMiningState(
     }
 }
 
+/// <summary>One persisted refinery work order. Editor chrome and live timer display stay out.</summary>
+public sealed record GameRefineryJob(
+    string Id,
+    string Label,
+    string Resources,
+    string Location,
+    string Refinery,
+    WorkOrderStatus Status,
+    string Notes,
+    DateTime CreatedAt,
+    DateTime? TimerStart,
+    DateTime? TimerEnd)
+{
+    public bool IsOpen => Status != WorkOrderStatus.Complete;
+    public bool IsReady => Status == WorkOrderStatus.ReadyToCollect;
+    public bool IsInProgress => Status is WorkOrderStatus.Mining or WorkOrderStatus.Refining;
+}
+
+/// <summary>
+/// Immutable refinery-job slice published into <see cref="GameState"/>.
+///
+/// This is durable work-order context, not flyout filters or editor chrome.
+/// A log reset does not clear jobs. <c>DataService</c> remains the persistence
+/// owner and publishes here after load, save, delete, or clear.
+/// </summary>
+public sealed record GameRefineryState(IReadOnlyList<GameRefineryJob> Jobs)
+{
+    public static GameRefineryState Empty { get; } = new(Array.Empty<GameRefineryJob>());
+
+    public bool HasOpenJobs => Jobs.Any(j => j.IsOpen);
+    public int ReadyCount => Jobs.Count(j => j.IsReady);
+    public int InProgressCount => Jobs.Count(j => j.IsInProgress);
+
+    public bool Equals(GameRefineryState? other) =>
+        other is not null && Jobs.SequenceEqual(other.Jobs);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        foreach (var job in Jobs) hash.Add(job);
+        return hash.ToHashCode();
+    }
+}
+
 /// <summary>
 /// App-lifetime observable operational state for SC-navLink.
 ///
@@ -206,6 +250,7 @@ public sealed class GameState
     private GameHaulingState _hauling = GameHaulingState.Empty;
     private GameWalletState _wallet = GameWalletState.Empty;
     private GameMiningState _mining = GameMiningState.Empty;
+    private GameRefineryState _refinery = GameRefineryState.Empty;
 
     /// <summary>Latest location snapshot. The returned record is immutable and safe to retain.</summary>
     public GameLocationState Location
@@ -261,6 +306,15 @@ public sealed class GameState
         }
     }
 
+    /// <summary>Latest refinery-job snapshot. The returned record is immutable and safe to retain.</summary>
+    public GameRefineryState Refinery
+    {
+        get
+        {
+            lock (_gate) return _refinery;
+        }
+    }
+
     /// <summary>Raised when any shared-state slice changes.</summary>
     public event Action? Changed;
 
@@ -281,6 +335,9 @@ public sealed class GameState
 
     /// <summary>Raised when the mining-scan snapshot changes.</summary>
     public event Action? MiningChanged;
+
+    /// <summary>Raised when the refinery-job snapshot changes.</summary>
+    public event Action? RefineryChanged;
 
     /// <summary>
     /// Publish the result of the location domain service. Internal so ordinary consumers cannot
@@ -308,6 +365,10 @@ public sealed class GameState
     /// <summary>Publish the result of the mining-scan decode path.</summary>
     internal void PublishMining(GameMiningState mining)
         => Publish(ref _mining, mining, () => MiningChanged);
+
+    /// <summary>Publish the result of the persisted refinery work-order set.</summary>
+    internal void PublishRefinery(GameRefineryState refinery)
+        => Publish(ref _refinery, refinery, () => RefineryChanged);
 
     private void Publish<T>(ref T field, T value, Func<Action?> sliceEvent) where T : class
     {
