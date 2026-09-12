@@ -22,7 +22,7 @@ The `foundation/0.1` branch is the integration branch for this phase.
 
 GitHub issues define current task status and acceptance criteria. This document defines product intent and long-lived project rules.
 
-The next architecture task is Issue #3, which introduces the shared `GameState` model.
+The next architecture task is Issue #5, which adds the native Market view.
 
 ## Product goals
 

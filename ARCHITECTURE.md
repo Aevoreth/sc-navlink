@@ -33,7 +33,7 @@ app makes a network call.
 |  Hauling(HaulTracker/Parser/Contract/Shard) |             |
 |  Network(File/Store/Scope) |                              |
 |  Update(Service/Verifier/Manifest/Notice) |               |
-|  Market(DataService/Snapshot/NameMap/Queries/Notice) |    |
+|  Market(DataService/Catalog/Cache/UexProvider/Snapshot/Queries) |    |
 |  Guides(Catalog) | ExecHangarCycle |                      |
 |  Overlay(Tabs/GhostGeometry/GhostFootprints) |            |
 |  ScmdbImport(Parser/Plan) |                               |
@@ -46,6 +46,7 @@ app makes a network call.
 +----------------------------v------------------------------+
 |  Storage:  embedded seed_data.json  +  SQLite  +  JSON    |
 |            settings  +  local network.db (Blueprint Net)  |
+|            +  cache/provider_cache.db (UEX market cache)  |
 +-----------------------------------------------------------+
 ```
 
@@ -114,24 +115,27 @@ The view model controls these services. Each service holds little or no state.
   the opt-in update subsystem (see Data and storage). Only `UpdateService` (with
   its HTTP transport) touches the network. The other three do no network work:
   signature and hash verification, manifest parsing, and the notice text.
-- **Market (MarketDataService / MarketSnapshot / MarketSnapshotFile /
-  MarketNameMap / MarketQueries / MarketNotice)** - the opt-in live market data
-  subsystem. `MarketDataService` runs the hourly fetch cycle against the UEX
-  community API (see SECURITY.md); it and `UpdateService` are the only two
-  places in the app that touch the network. `MarketSnapshot` is the in-memory
-  price cache; `MarketSnapshotFile` persists it to
-  `%AppData%\NexusApp\cache\uex_snapshot.json` and reloads it at startup, so the
-  last fetched prices still show when Nexus is offline. `MarketNameMap` links
-  the seed's raw resource names to UEX's commodity names and their refined
-  counterparts. `MarketQueries` is the pure read layer. The RS Signal Decoder,
-  the Mining Codex, the Refinery Tracker, and the overlay's own scan cards
-  (`OverlayWindow.FillMarketSell` / `RefreshMarketSellLines`) all call it for a
-  priced hit. `MarketNotice` holds the feature's user-facing copy (the consent
-  strip, the Settings section, the source note), mirroring `UpdateNotice`.
+- **Market (IMarketCatalog / MarketDataService / UexMarketProvider /
+  ProviderCacheStore / MarketSnapshot / MarketNameMap / MarketQueries /
+  MarketNotice)** - the opt-in live market data subsystem.
+  `MarketDataService` runs the hourly fetch cycle. `UexMarketProvider` calls
+  the UEX API 2.0 (https://uexcorp.space/api). It returns normalized catalog
+  rows, not UEX DTOs. `ProviderCacheStore` keeps those rows in
+  `%AppData%\NexusApp\cache\provider_cache.db`. A successful payload updates a
+  row only when UEX `date_modified` is newer. An omitted id stays in SQLite.
+  Cadence is a fetch throttle. Cached rows do not expire.
+  `FetchedUtc` is the last UEX call. `ObservedUtc` is the community report age.
+  Issue #5 shows that age on the Market view. `IMarketCatalog` is the read API
+  for that view. Inherited Trade and Overlay read `MarketSnapshot`. That
+  snapshot is a projection of current listings. `GameState` is live operational
+  state. It is not this catalog. Concurrent refreshes share one in-flight cycle.
+  A failed refresh must keep last-known-good rows. A leftover
+  `uex_snapshot.json` is imported one time when the cache is empty.
+  `MarketDataService` and `UpdateService` are the only two places in the app
+  that touch the network. `MarketNameMap` links seed resource names to UEX
+  commodity names. `MarketQueries` is the pure read layer over `MarketSnapshot`.
   Consent is a tri-state setting, `MarketDataEnabled` (null = unanswered,
-  true/false = the user's standing choice), the same pattern as the
-  update-check toggle. The toggle sits in the Settings UPDATES tab, in its own
-  Market Data section next to the update check, not under Diagnostics.
+  true/false = the user's standing choice). The toggle sits in Settings UPDATES.
 - **GuideCatalog** - the single source of truth for the Mission Guides feature.
   Each entry is one curated guide image: an id, a title, a category, an
   embedded PNG resource, and its native pixel size. `GuidesPage` and the
@@ -228,15 +232,14 @@ types.
   without a helper program and without a script. See Portable self-update below.
 - **Live market prices** are opt-in, gated by the tri-state `MarketDataEnabled`
   setting (null = the one-time consent strip has not been answered, true/false =
-  the user's standing choice). When enabled, `MarketDataService` fetches sell
-  prices from the UEX community API about once an hour while NexusApp is open,
-  and this fetch is the only other network code in the app besides the update
-  check. The fetched snapshot is cached at
-  `%AppData%\NexusApp\cache\uex_snapshot.json` (`MarketSnapshotFile`), so the
-  last fetched prices load back on the next start and NexusApp works from them
-  fully offline between fetches. The bundled mining seed data itself is not
-  fetched from anywhere; only its prices are enriched from UEX when the user
-  opts in.
+  the user's standing choice). When enabled, `MarketDataService` fetches prices
+  from the UEX community API about once an hour while NexusApp is open. This
+  fetch is the only other network code in the app besides the update check.
+  Rows persist in `%AppData%\NexusApp\cache\provider_cache.db`. A leftover
+  `uex_snapshot.json` is imported one time when that cache is empty. NexusApp
+  can serve last-known-good prices when UEX is offline. Cadence is a fetch
+  throttle. Cached rows do not expire. The bundled mining seed is not fetched.
+  UEX only enriches prices after the user opts in.
 
 ## Key flows
 

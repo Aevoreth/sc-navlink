@@ -1,8 +1,6 @@
-using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
 using System.Text;
-using System.Text.Json;
 
 namespace NexusApp.Services;
 
@@ -72,10 +70,11 @@ internal sealed class HttpMarketTransport : IMarketDataTransport
 }
 
 // Owns the UEX fetch cycle: the hourly throttle, single-flight, the whole-cycle deadline, and
-// the in-memory snapshot that the UI reads. The cycle is deliberately fault tolerant per
-// DATASET: one endpoint failing never costs the others their data, because stale prices with a
-// visible age are worth more to a miner than an empty panel.
-public sealed class MarketDataService : IDisposable
+// the in-memory snapshot that the UI reads. Durable rows live in ProviderCacheStore (SQLite).
+// The cycle is deliberately fault tolerant per DATASET: one endpoint failing never costs the
+// others their data, because stale prices with a visible age are worth more to a miner than an
+// empty panel.
+public sealed class MarketDataService : IDisposable, IMarketCatalog
 {
     public const string Tag = "[NET]";
     public const string BaseUrl = "https://api.uexcorp.uk/2.0/";
@@ -103,7 +102,8 @@ public sealed class MarketDataService : IDisposable
     private const string CommoditiesPricesAllEndpoint = "commodities_prices_all";
 
     private readonly SettingsService _settings;
-    private readonly IMarketDataTransport _transport;
+    private readonly IMarketDataProvider _provider;
+    private readonly ProviderCacheStore _cache;
     private readonly string _snapshotPath;
     private readonly bool _demo;
     private readonly Func<bool>? _isForegroundRelevant;
@@ -127,6 +127,25 @@ public sealed class MarketDataService : IDisposable
     // half-updated mix. volatile makes that publication visible to other threads without a lock.
     internal MarketSnapshot? Snapshot => _snapshot;
 
+    public string Source => ProviderCacheStore.SourceUex;
+
+    public string LiveGameVersion => _snapshot?.LiveGameVersion ?? "";
+
+    public CachedSlice<CatalogCommodity> Commodities =>
+        _cache.Slice(ProviderDataClass.Commodities, _cache.CurrentCommodities(), DateTime.UtcNow);
+
+    public CachedSlice<CatalogTerminal> Terminals =>
+        _cache.Slice(ProviderDataClass.Terminals, _cache.CurrentTerminals(), DateTime.UtcNow);
+
+    public CachedSlice<CatalogTradePrice> TradePrices =>
+        _cache.Slice(ProviderDataClass.TradePrices, _cache.CurrentTradePrices(), DateTime.UtcNow);
+
+    public CachedSlice<CatalogRefinedPrice> RefinedPrices =>
+        _cache.Slice(ProviderDataClass.RefinedPrices, _cache.CurrentRefinedPrices(), DateTime.UtcNow);
+
+    public CachedSlice<CatalogYield> Yields =>
+        _cache.Slice(ProviderDataClass.Yields, _cache.CurrentYields(), DateTime.UtcNow);
+
     public bool FetchInProgress => Volatile.Read(ref _busy) != 0;
 
     // One short sentence naming the first thing that went wrong in the last cycle, for the
@@ -138,7 +157,7 @@ public sealed class MarketDataService : IDisposable
     public event Action? Changed;
 
     public MarketDataService(SettingsService settings, Func<bool>? isForegroundRelevant = null)
-        : this(settings, new HttpMarketTransport(),
+        : this(settings, new RateLimitedTransport(new HttpMarketTransport()),
                Path.Combine(AppPaths.Root, "cache", "uex_snapshot.json"), AppPaths.IsDemoProfile,
                isForegroundRelevant)
     { }
@@ -147,8 +166,13 @@ public sealed class MarketDataService : IDisposable
                                bool isDemoProfile, Func<bool>? isForegroundRelevant = null)
     {
         _settings = settings;
-        _transport = transport;
+        _provider = new UexMarketProvider(transport);
         _snapshotPath = snapshotPath;
+        var cacheDir = Path.GetDirectoryName(snapshotPath);
+        var cachePath = string.IsNullOrEmpty(cacheDir)
+            ? ProviderCacheStore.FileName
+            : Path.Combine(cacheDir, ProviderCacheStore.FileName);
+        _cache = new ProviderCacheStore(cachePath);
         _demo = isDemoProfile;
         _isForegroundRelevant = isForegroundRelevant;
     }
@@ -209,19 +233,36 @@ public sealed class MarketDataService : IDisposable
     }
 
     // The disk half of Start, exposed as an internal seam so the load path is testable without
-    // a dispatcher. A discarded file is an expected state (first run, schema bump), not an error.
+    // a dispatcher. SQLite is the durable store. A leftover uex_snapshot.json is imported once
+    // when the cache is empty. A discarded file is an expected state (first run), not an error.
     internal void LoadSnapshotFromDisk()
     {
-        var loaded = MarketSnapshotFile.Load(_snapshotPath, out var reason);
-        if (loaded is null)
+        try
         {
-            Logger.Info($"{Tag} market snapshot not loaded: {reason ?? "no snapshot"}");
-            return;
+            if (!_cache.HasAnyRows() && File.Exists(_snapshotPath))
+            {
+                if (_cache.ImportSnapshotFile(_snapshotPath))
+                    Logger.Info($"{Tag} market cache imported from the previous JSON snapshot");
+                else
+                    Logger.Info($"{Tag} market snapshot not loaded: JSON snapshot was not usable");
+            }
+
+            if (!_cache.HasAnyRows())
+            {
+                Logger.Info($"{Tag} market snapshot not loaded: no snapshot");
+                return;
+            }
+
+            var loaded = _cache.ProjectSnapshot();
+            _snapshot = loaded;
+            Logger.Info($"{Tag} market snapshot loaded: {loaded.Commodities.Rows.Count} commodities, " +
+                        $"{loaded.RawPrices.Rows.Count} raw prices, {loaded.RefinedPrices.Rows.Count} refined prices");
+            RaiseChanged();
         }
-        _snapshot = loaded;
-        Logger.Info($"{Tag} market snapshot loaded: {loaded.Commodities.Rows.Count} commodities, " +
-                    $"{loaded.RawPrices.Rows.Count} raw prices, {loaded.RefinedPrices.Rows.Count} refined prices");
-        RaiseChanged();
+        catch (Exception ex)
+        {
+            Logger.Error($"{Tag} market cache load failed ({ex.GetType().Name})");
+        }
     }
 
     // The auto path: the toggle, the demo profile, and the hourly throttle all gate it. Fire and
@@ -275,14 +316,11 @@ public sealed class MarketDataService : IDisposable
             Logger.Info($"{Tag} market refresh started ({(manual ? "manual" : "auto")})");
 
             var utcNow = DateTime.UtcNow;
-            // Start from a carbon copy of the live snapshot: every dataset that this cycle does
-            // not successfully replace keeps its previous rows AND its previous FetchedUtc.
-            var next = Carry(_snapshot);
             var cycle = new CycleResult();
 
             try
             {
-                await RunCycleAsync(next, utcNow, cycle, cts.Token).ConfigureAwait(false);
+                await RunCycleAsync(utcNow, cycle, cts.Token).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -302,8 +340,7 @@ public sealed class MarketDataService : IDisposable
             // publishing it last guarantees nobody pairs this cycle's data with the previous
             // cycle's error text.
             _lastError = cycle.FirstError;
-            _snapshot = next;                  // atomic publication of the whole cycle's result
-            MarketSnapshotFile.Save(_snapshotPath, next);
+            _snapshot = _cache.ProjectSnapshot();
             Logger.Info($"{Tag} market refresh finished: {cycle.Refreshed} datasets refreshed, {cycle.Failures} failed");
             RaiseChanged();
         }
@@ -327,108 +364,80 @@ public sealed class MarketDataService : IDisposable
         }
     }
 
-    private async Task RunCycleAsync(MarketSnapshot next, DateTime utcNow, CycleResult cycle, CancellationToken ct)
+    private async Task RunCycleAsync(DateTime utcNow, CycleResult cycle, CancellationToken ct)
     {
+        var snap = _cache.ProjectSnapshot();
+
         // 1. Live game version: labels the prices in the UI ("patch 4.9"). A failure keeps the
         //    previous label rather than blanking it.
-        var (body, ms) = await FetchAsync(GameVersionsEndpoint, BaseUrl + GameVersionsEndpoint, cycle, ct).ConfigureAwait(false);
-        if (body is not null)
+        var (live, liveError, liveMs, liveBytes) = await _provider.FetchLiveGameVersionAsync(ct).ConfigureAwait(false);
+        if (live is not null)
         {
-            var live = MarketParse.ParseLiveGameVersion(body);
-            if (live is not null)
-            {
-                next.LiveGameVersion = live;
-                Logger.Info($"{Tag} market fetch {GameVersionsEndpoint}: live {live} ({Bytes(body)} bytes, {ms}ms)");
-            }
-            else
-            {
-                NoteShape(cycle, GameVersionsEndpoint);
-            }
+            _cache.SetLiveGameVersion(live, utcNow);
+            Logger.Info($"{Tag} market fetch {GameVersionsEndpoint}: live {live} ({liveBytes} bytes, {liveMs}ms)");
+        }
+        else if (liveError is not null)
+        {
+            cycle.Note(GameVersionsEndpoint, liveError);
+            Logger.Error($"{Tag} market fetch {GameVersionsEndpoint} failed: {liveError}");
+            _cache.NoteFailure(ProviderDataClass.GameVersion, utcNow);
         }
 
         // 2. Commodity catalogue: also the input to the refined leg below.
-        (body, ms) = await FetchAsync(CommoditiesEndpoint, BaseUrl + CommoditiesEndpoint, cycle, ct).ConfigureAwait(false);
-        if (body is not null && RequireArray(body, CommoditiesEndpoint, cycle))
-        {
-            var rows = MarketParse.ParseCommodities(body, out var skipped);
-            LogRows(CommoditiesEndpoint, rows.Count, skipped, body, ms);
-            if (rows.Count > 0)
-            {
-                next.Commodities = new MarketDataset<MarketCommodity> { FetchedUtc = utcNow, Rows = rows };
-                cycle.Refreshed++;
-            }
-            else
-            {
-                KeptOnEmpty(CommoditiesEndpoint);
-            }
-        }
+        var commodities = await _provider.FetchCommoditiesAsync(ct).ConfigureAwait(false);
+        ApplyCatalogFetch(CommoditiesEndpoint, commodities, utcNow, cycle, ProviderDataClass.Commodities,
+            rows => _cache.MergeCommodities(rows, utcNow));
 
-        // 3. Refined prices, one call per refined commodity the seed data cares about: no bulk
-        //    endpoint returns the full row shape, so the dataset is the union of those calls.
-        //    There is deliberately no raw-price leg any more: UEX's raw ore-sales dataset has had
-        //    no community reports since patch 4.8, so nothing in the app displays a raw price
-        //    (amendment 2026-07-27). The snapshot keeps its RawPrices dataset for schema
-        //    stability; it is carried forward untouched and never refreshed.
-        await FetchPricesByIdAsync(RefinedPricesEndpoint, "refined", RefinedIdsFor(next.Commodities.Rows),
-                                   next.RefinedPrices, d => next.RefinedPrices = d, utcNow, cycle, ct).ConfigureAwait(false);
+        snap = _cache.ProjectSnapshot();
 
-        // 4. Trade tab: every commodity at every terminal, one bulk call (this endpoint IS the
-        //    bulk shape already, so there is no per-id fan-out like the refined leg above). Same
-        //    hourly cadence as the refined leg; MaxResponseBytes (8 MB) already comfortably
-        //    covers the ~1.05 MB this endpoint returns (2,595 rows, confirmed live capture).
-        (body, ms) = await FetchAsync(CommoditiesPricesAllEndpoint, BaseUrl + CommoditiesPricesAllEndpoint, cycle, ct).ConfigureAwait(false);
-        if (body is not null && RequireArray(body, CommoditiesPricesAllEndpoint, cycle))
-        {
-            var tradeRows = MarketParse.ParseTradePriceRows(body, out var tradeSkipped);
-            LogRows(CommoditiesPricesAllEndpoint, tradeRows.Count, tradeSkipped, body, ms);
-            if (tradeRows.Count > 0)
-            {
-                next.TradePrices = new MarketDataset<TradePriceRow> { FetchedUtc = utcNow, Rows = tradeRows };
-                cycle.Refreshed++;
-            }
-            else
-            {
-                KeptOnEmpty(CommoditiesPricesAllEndpoint);
-            }
-        }
+        // 3. Refined prices, one call per refined commodity the seed data cares about.
+        await FetchPricesByIdAsync("refined", RefinedIdsFor(snap.Commodities.Rows),
+            snap.RefinedPrices, utcNow, cycle, ct).ConfigureAwait(false);
+
+        // 4. Trade tab: every commodity at every terminal, one bulk call.
+        var trade = await _provider.FetchTradePricesAsync(ct).ConfigureAwait(false);
+        ApplyCatalogFetch(CommoditiesPricesAllEndpoint, trade, utcNow, cycle, ProviderDataClass.TradePrices,
+            rows => _cache.MergeTradePrices(rows, utcNow));
 
         // 5. Reference data, on its own much slower clock.
-        if (utcNow - next.Yields.FetchedUtc >= ReferenceInterval)
+        snap = _cache.ProjectSnapshot();
+        if (utcNow - snap.Yields.FetchedUtc >= ReferenceInterval)
         {
-            (body, ms) = await FetchAsync(YieldsEndpoint, BaseUrl + YieldsEndpoint, cycle, ct).ConfigureAwait(false);
-            if (body is not null && RequireArray(body, YieldsEndpoint, cycle))
-            {
-                var rows = MarketParse.ParseYieldRows(body, out var skipped);
-                LogRows(YieldsEndpoint, rows.Count, skipped, body, ms);
-                if (rows.Count > 0)
-                {
-                    next.Yields = new MarketDataset<MarketYieldRow> { FetchedUtc = utcNow, Rows = rows };
-                    cycle.Refreshed++;
-                }
-                else
-                {
-                    KeptOnEmpty(YieldsEndpoint);
-                }
-            }
+            var yields = await _provider.FetchYieldsAsync(ct).ConfigureAwait(false);
+            ApplyCatalogFetch(YieldsEndpoint, yields, utcNow, cycle, ProviderDataClass.Yields,
+                rows => _cache.MergeYields(rows, utcNow));
         }
 
-        if (utcNow - next.Terminals.FetchedUtc >= ReferenceInterval)
+        snap = _cache.ProjectSnapshot();
+        if (utcNow - snap.Terminals.FetchedUtc >= ReferenceInterval)
         {
-            (body, ms) = await FetchAsync(TerminalsEndpoint, BaseUrl + TerminalsEndpoint, cycle, ct).ConfigureAwait(false);
-            if (body is not null && RequireArray(body, TerminalsEndpoint, cycle))
-            {
-                var rows = MarketParse.ParseTerminals(body, out var skipped);
-                LogRows(TerminalsEndpoint, rows.Count, skipped, body, ms);
-                if (rows.Count > 0)
-                {
-                    next.Terminals = new MarketDataset<MarketTerminal> { FetchedUtc = utcNow, Rows = rows };
-                    cycle.Refreshed++;
-                }
-                else
-                {
-                    KeptOnEmpty(TerminalsEndpoint);
-                }
-            }
+            var terminals = await _provider.FetchTerminalsAsync(ct).ConfigureAwait(false);
+            ApplyCatalogFetch(TerminalsEndpoint, terminals, utcNow, cycle, ProviderDataClass.Terminals,
+                rows => _cache.MergeTerminals(rows, utcNow));
+        }
+    }
+
+    private void ApplyCatalogFetch<T>(string endpoint, ProviderFetch<T> fetch, DateTime utcNow, CycleResult cycle,
+                                      ProviderDataClass dataClass, Action<IReadOnlyList<T>> merge)
+    {
+        if (!fetch.Ok)
+        {
+            var reason = fetch.Error ?? "the response was not in the expected format";
+            Logger.Error($"{Tag} market fetch {endpoint} failed: {reason}");
+            cycle.Note(endpoint, reason);
+            _cache.NoteFailure(dataClass, utcNow);
+            return;
+        }
+
+        LogRows(endpoint, fetch.Rows.Count, fetch.Skipped, fetch.ByteCount, fetch.ElapsedMs);
+        if (fetch.Rows.Count > 0)
+        {
+            merge(fetch.Rows);
+            cycle.Refreshed++;
+        }
+        else
+        {
+            KeptOnEmpty(endpoint);
         }
     }
 
@@ -436,18 +445,15 @@ public sealed class MarketDataService : IDisposable
     // row shape), so it merges instead of replacing: an id that failed keeps ONLY its own
     // previous rows, every id that succeeded replaces its own, and ids that are no longer mapped
     // drop out, which is how a commodity renamed or removed by a patch stops haunting the
-    // dataset. Kept parameterised by endpoint and dataset, because the merge discipline is the
-    // load-bearing part and it must not have to be rewritten for a second price leg.
-    private async Task FetchPricesByIdAsync(string endpoint, string kind, List<int> ids,
+    // dataset. The union is then written through merge-newer so last_seen matches FetchedUtc
+    // for every id that belongs in the current listing.
+    private async Task FetchPricesByIdAsync(string kind, List<int> ids,
                                             MarketDataset<MarketPriceRow> previous,
-                                            Action<MarketDataset<MarketPriceRow>> apply,
                                             DateTime utcNow, CycleResult cycle, CancellationToken ct)
     {
         if (ids.Count == 0)
         {
-            // No commodity catalogue yet (first run with a failed step 2): leave the previous
-            // rows exactly as they are rather than wiping them.
-            Logger.Info($"{Tag} market fetch {endpoint} skipped: no mapped {kind} commodities yet");
+            Logger.Info($"{Tag} market fetch {RefinedPricesEndpoint} skipped: no mapped {kind} commodities yet");
             return;
         }
 
@@ -457,41 +463,37 @@ public sealed class MarketDataService : IDisposable
         {
             foreach (var id in ids)
             {
-                var label = $"{endpoint} id {id}";
-                var (body, ms) = await FetchAsync(label, $"{BaseUrl}{endpoint}?id_commodity={id}", cycle, ct)
-                    .ConfigureAwait(false);
-                if (body is null || !RequireArray(body, label, cycle)) continue;
+                var label = $"{RefinedPricesEndpoint} id {id}";
+                var fetch = await _provider.FetchRefinedPricesAsync(id, ct).ConfigureAwait(false);
+                if (!fetch.Ok)
+                {
+                    var reason = fetch.Error ?? "the response was not in the expected format";
+                    Logger.Error($"{Tag} market fetch {label} failed: {reason}");
+                    cycle.Note(label, reason);
+                    continue;
+                }
 
-                var rows = MarketParse.ParsePriceRows(body, out var skipped);
-                LogRows(label, rows.Count, skipped, body, ms);
-                if (rows.Count == 0)
+                LogRows(label, fetch.Rows.Count, fetch.Skipped, fetch.ByteCount, fetch.ElapsedMs);
+                if (fetch.Rows.Count == 0)
                 {
                     KeptOnEmpty(label);
                     continue;
                 }
                 replaced.Add(id);
-                fresh.AddRange(rows);
+                foreach (var row in fetch.Rows)
+                    fresh.Add(UexNormalizer.ToMarket(row));
             }
         }
         finally
         {
-            // The merge runs on the way out no matter how the loop ends. This leg is ~25 of the
-            // cycle's ~30 requests, so the deadline (or a shutdown) lands INSIDE it far more
-            // often than anywhere else, and unwinding without merging would throw away every id
-            // that already came back. Pure list work, so it cannot throw over the original
-            // exception.
-            MergeById(previous, ids, fresh, replaced, utcNow, cycle, apply);
+            MergeRefinedIntoCache(previous, ids, fresh, replaced, utcNow, cycle);
         }
     }
 
-    // Union semantics, applied to whatever the leg managed to fetch: ids that returned rows
-    // replace their own rows, ids that failed (or never ran, because the cycle was cancelled
-    // first) keep their own previous rows, and ids no longer mapped drop out entirely.
-    private static void MergeById(MarketDataset<MarketPriceRow> previous, List<int> ids, List<MarketPriceRow> fresh,
-                                  HashSet<int> replaced, DateTime utcNow, CycleResult cycle,
-                                  Action<MarketDataset<MarketPriceRow>> apply)
+    private void MergeRefinedIntoCache(MarketDataset<MarketPriceRow> previous, List<int> ids, List<MarketPriceRow> fresh,
+                                       HashSet<int> replaced, DateTime utcNow, CycleResult cycle)
     {
-        if (replaced.Count == 0) return;   // nothing landed: the previous rows and stamp stand
+        if (replaced.Count == 0) return;
 
         var wanted = new HashSet<int>(ids);
         var merged = new List<MarketPriceRow>(fresh);
@@ -499,7 +501,7 @@ public sealed class MarketDataService : IDisposable
         {
             if (wanted.Contains(row.CommodityId) && !replaced.Contains(row.CommodityId)) merged.Add(row);
         }
-        apply(new MarketDataset<MarketPriceRow> { FetchedUtc = utcNow, Rows = merged });
+        _cache.MergeRefinedPrices(merged.Select(UexNormalizer.RefinedPrice).ToList(), utcNow);
         cycle.Refreshed++;
     }
 
@@ -524,57 +526,11 @@ public sealed class MarketDataService : IDisposable
         return ids;
     }
 
-    // Returns the body, or null when the request failed (already noted and logged). A cancelled
-    // cycle rethrows so the remaining endpoints are skipped instead of failing one by one.
-    private async Task<(string? body, long ms)> FetchAsync(string endpoint, string url, CycleResult cycle, CancellationToken ct)
-    {
-        var sw = Stopwatch.StartNew();
-        try
-        {
-            var body = await _transport.GetStringAsync(url, MaxResponseBytes, ct).ConfigureAwait(false);
-            return (body, sw.ElapsedMilliseconds);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            // ex.Message only: a stack trace in nexus.log for a routine network blip is noise,
-            // and nothing from a response body is ever echoed. A per-request timeout arrives as
-            // TaskCanceledException, whose message ("A task was canceled") would tell the user
-            // nothing, so it gets named properly.
-            var reason = ex is OperationCanceledException ? "the request timed out" : Shorten(ex.Message);
-            Logger.Error($"{Tag} market fetch {endpoint} failed: {reason}");
-            cycle.Note(endpoint, reason);
-            return (null, sw.ElapsedMilliseconds);
-        }
-    }
+    private static void LogRows(string endpoint, int kept, int skipped, int bytes, long ms) =>
+        Logger.Info($"{Tag} market fetch {endpoint}: {kept} rows ({skipped} skipped, {bytes} bytes, {ms}ms)");
 
-    // A 200 carrying an error envelope, an HTML captive-portal page, or a non-array payload is a
-    // failure, not an empty dataset: the difference decides whether previous rows are kept.
-    private static bool RequireArray(string body, string endpoint, CycleResult cycle)
-    {
-        if (MarketParse.TryGetData(body, out var data) && data.ValueKind == JsonValueKind.Array) return true;
-        NoteShape(cycle, endpoint);
-        return false;
-    }
-
-    private static void NoteShape(CycleResult cycle, string endpoint)
-    {
-        Logger.Error($"{Tag} market fetch {endpoint} failed: the response was not in the expected format");
-        cycle.Note(endpoint, "the response was not in the expected format");
-    }
-
-    // A well formed but empty array is not an error (it is how UEX reports "nothing listed"),
-    // but it never replaces rows either: stale prices with a visible age beat an empty panel.
     private static void KeptOnEmpty(string endpoint) =>
         Logger.Info($"{Tag} market fetch {endpoint} returned no rows; keeping the previous rows");
-
-    private static void LogRows(string endpoint, int kept, int skipped, string body, long ms) =>
-        Logger.Info($"{Tag} market fetch {endpoint}: {kept} rows ({skipped} skipped, {Bytes(body)} bytes, {ms}ms)");
-
-    private static int Bytes(string body) => Encoding.UTF8.GetByteCount(body);
 
     // Keeps LastError to one readable line: the Settings status row renders it inline.
     private static string Shorten(string? message)
@@ -583,25 +539,6 @@ public sealed class MarketDataService : IDisposable
         var line = message.Split('\n')[0].Trim();
         return line.Length <= 120 ? line : line[..120];
     }
-
-    // A shallow copy: the datasets are new objects (so replacing one cannot be seen by a reader
-    // holding the previous snapshot) but the Rows lists are shared by reference, which is safe
-    // because a list is never mutated once published. Every replacement builds a new list.
-    private static MarketSnapshot Carry(MarketSnapshot? previous) => new()
-    {
-        Schema = 1,
-        LiveGameVersion = previous?.LiveGameVersion ?? "",
-        Commodities = CopyDataset(previous?.Commodities),
-        RawPrices = CopyDataset(previous?.RawPrices),
-        RefinedPrices = CopyDataset(previous?.RefinedPrices),
-        TradePrices = CopyDataset(previous?.TradePrices),
-        Yields = CopyDataset(previous?.Yields),
-        Terminals = CopyDataset(previous?.Terminals),
-    };
-
-    private static MarketDataset<T> CopyDataset<T>(MarketDataset<T>? dataset) =>
-        dataset is null ? new MarketDataset<T>()
-                        : new MarketDataset<T> { FetchedUtc = dataset.FetchedUtc, Rows = dataset.Rows };
 
     // A subscriber must never be able to fault the fetch cycle (fail-closed). The real case is a
     // UI handler calling Dispatcher.Invoke while the app is shutting down.
@@ -645,6 +582,7 @@ public sealed class MarketDataService : IDisposable
                 Logger.Error($"{Tag} market refresh did not stop within {DisposeDrainTimeout.TotalSeconds:0}s; leaving it to finish");
         }
         catch (Exception ex) { Logger.Error($"{Tag} market refresh did not stop cleanly: {Shorten(ex.Message)}"); }
+        _cache.Dispose();
     }
 
     // What one cycle did, so the end-of-cycle log line and LastError read from the same record.

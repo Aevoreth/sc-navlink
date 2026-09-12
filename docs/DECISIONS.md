@@ -165,6 +165,37 @@ Issue #4 implements the first independent UEX provider and cache layer.
 
 Issue #5 builds the first native Market view on that layer.
 
+## D-011: Cache UEX rows with merge-newer and a fetch throttle
+
+**Date:** 2026-09-12  
+**Status:** Accepted
+
+### Context
+
+Issue #4 adds the first provider cache. TTL must not delete prices. Age is metadata for Issue #5.
+
+### Decision
+
+Call UEX about once an hour while the app is open and consent is on.
+
+Terminals and yields use a 24-hour clock. Manual Refresh stays in Settings.
+
+On a successful payload, add or update a row only when UEX `date_modified` is newer.
+
+An older or equal stamp leaves the cached values. An omitted id stays in SQLite.
+
+The inherited Trade snapshot shows only current listings.
+
+A failed refresh must keep last-known-good rows.
+
+`GameState` does not store this catalog.
+
+### Consequences
+
+Issue #5 can show data age from `ObservedUtc` and `FetchedUtc`.
+
+The SQLite file is `%AppData%\NexusApp\cache\provider_cache.db`.
+
 ## D-008: Build NEXT as deterministic logic before AI
 
 **Date:** 2026-09-11  
