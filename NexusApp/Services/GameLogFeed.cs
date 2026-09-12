@@ -141,12 +141,25 @@ public sealed class GameLogFeed : IDisposable
     /// <summary>The watched channel changed (auto-follow or a manual path change).</summary>
     public event Action<GameChannel>? ChannelChanged;
 
-    public GameLogFeed()
+    /// <summary>
+    /// Shared operational state this feed publishes session facts into. Null when a test or
+    /// inherited constructor did not supply a store; production composition always passes one.
+    /// </summary>
+    public GameState? GameState { get; }
+
+    private int _logGeneration;
+
+    public GameLogFeed(GameState? gameState = null)
     {
+        GameState = gameState;
         _watcher.LineAppended  += _subs.Line;
-        _watcher.LogReset      += _subs.LogReset;
+        _watcher.LogReset      += HandleLogReset;
         _watcher.StatusChanged += _subs.Status;
-        _watcher.SessionLiveChanged += live => SessionLiveChanged?.Invoke(live);
+        _watcher.SessionLiveChanged += live =>
+        {
+            SessionLiveChanged?.Invoke(live);
+            PublishSession();
+        };
 
         _probeTimer = new System.Windows.Threading.DispatcherTimer
         {
@@ -220,9 +233,25 @@ public sealed class GameLogFeed : IDisposable
         _subs.Started(_watcher.Path, fromBeginning, replayOnlyTo);
         Started?.Invoke(_watcher.Path);
         if (channelFlip) ChannelChanged?.Invoke(channel);
+        PublishSession();
     }
 
     public void Stop() => _watcher.Stop();
+
+    /// <summary>
+    /// Game.log was truncated/recreated. Increments <see cref="GameSessionState.LogGeneration"/>
+    /// and publishes session without clearing location or shard slices. Internal so tests can
+    /// drive the log-session boundary without a real file truncate.
+    /// </summary>
+    internal void HandleLogReset()
+    {
+        _logGeneration++;
+        PublishSession();
+        _subs.LogReset();
+    }
+
+    private void PublishSession()
+        => GameState?.PublishSession(new GameSessionState(IsSessionLive, ActiveChannel, _logGeneration));
 
     private void AutoFollowTick()
     {
