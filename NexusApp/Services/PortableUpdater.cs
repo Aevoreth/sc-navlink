@@ -121,7 +121,7 @@ public sealed class PortableUpdater : IPortableSwapper
     internal static string? PreflightPathIssue(string? processPath, string baseDirectory, PortableEnv env)
     {
         if (string.IsNullOrEmpty(processPath)) return "the running process path is unknown";
-        if (!string.Equals(Path.GetFileName(processPath), "NexusApp.exe", StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(Path.GetFileName(processPath), AppIdentity.ExeFileName, StringComparison.OrdinalIgnoreCase))
             return "the app file has been renamed";
         string exeDir, baseDir;
         try
@@ -138,13 +138,16 @@ public sealed class PortableUpdater : IPortableSwapper
         if (exeDir.Length > 200) return "the install folder path is too long";
         if (exeDir.StartsWith(@"\\", StringComparison.Ordinal)) return "the install folder is on a network share";
         if (IsUnder(exeDir, env.TempPath)) return "the app is running from a temporary folder";
-        if (IsUnder(exeDir, env.AppDataRoot)) return "the app is running from the Nexus data folder";
+        if (IsUnder(exeDir, env.AppDataRoot)) return "the app is running from the SC-navLink data folder";
         if (IsUnder(exeDir, env.ProgramFiles) || IsUnder(exeDir, env.ProgramFilesX86))
             return "the install folder is under Program Files";
         if (IsUnder(exeDir, env.WindowsDir)) return "the install folder is under Windows";
-        var installerDir = Path.Combine(env.LocalAppData, "Nexus").TrimEnd('\\');
-        if (string.Equals(exeDir, installerDir, StringComparison.OrdinalIgnoreCase))
-            return "this is the installed copy of Nexus";
+        foreach (var folder in new[] { AppIdentity.InstallFolderName, AppIdentity.LegacyInstallFolderName })
+        {
+            var installerDir = Path.Combine(env.LocalAppData, folder).TrimEnd('\\');
+            if (string.Equals(exeDir, installerDir, StringComparison.OrdinalIgnoreCase))
+                return "this is the installed copy of SC-navLink";
+        }
         return null;
     }
 
@@ -186,8 +189,8 @@ public sealed class PortableUpdater : IPortableSwapper
             if (seg.EndsWith('.') || seg.EndsWith(' ')) return "entry segment ends with a dot or space";
             if (ReservedDeviceNames.Contains(seg.Split('.')[0])) return "reserved device name in entry";
         }
-        if (!string.Equals(segs[0], "NexusApp", StringComparison.OrdinalIgnoreCase))
-            return "entry outside the NexusApp top-level folder";
+        if (!string.Equals(segs[0], AppIdentity.PortableZipRoot, StringComparison.OrdinalIgnoreCase))
+            return "entry outside the sc-navlink top-level folder";
         var relSegs = segs.Skip(1).Where(s => s.Length > 0).ToArray();
         rel = string.Join('\\', relSegs);
         if (rel.Length == 0) return null;
@@ -254,7 +257,7 @@ public sealed class PortableUpdater : IPortableSwapper
                 continue;
             }
             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-            if (string.Equals(rel, "NexusApp.exe", StringComparison.OrdinalIgnoreCase)) exeSeen = true;
+            if (string.Equals(rel, AppIdentity.ExeFileName, StringComparison.OrdinalIgnoreCase)) exeSeen = true;
             using var src = entry.Open();
             using var dst = new FileStream(target, FileMode.CreateNew, FileAccess.Write, FileShare.None);
             using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
@@ -273,7 +276,7 @@ public sealed class PortableUpdater : IPortableSwapper
             hashes[rel] = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
         }
         if (!exeSeen)
-            throw new InvalidOperationException("the update archive does not contain NexusApp\\NexusApp.exe");
+            throw new InvalidOperationException($"the update archive does not contain {AppIdentity.PortableZipRoot}\\{AppIdentity.ExeFileName}");
         return new ExtractResult(hashes, total, destDir);
     }
 
@@ -288,14 +291,14 @@ public sealed class PortableUpdater : IPortableSwapper
         // Layout sanity: a real portable install has the native loaders beside the exe.
         if (!File.Exists(Path.Combine(_installDir, "e_sqlite3.dll")) ||
             !File.Exists(Path.Combine(_installDir, "wpfgfx_cor3.dll")))
-            return new(false, "this folder does not look like a portable Nexus install");
+            return new(false, "this folder does not look like a portable SC-navLink install");
         try
         {
             if ((File.GetAttributes(_installDir) & FileAttributes.ReparsePoint) != 0)
                 return new(false, "the install folder is a link, not a real folder");
         }
         catch (Exception ex) { return new(false, $"the install folder could not be inspected: {ex.Message}"); }
-        if (_nexusProcessCount() > 1) return new(false, "another Nexus window is open");
+        if (_nexusProcessCount() > 1) return new(false, "another SC-navLink window is open");
         // Writability probe: create + rename + delete catches Controlled Folder Access,
         // read-only media, and ACL denials in one shot. Explorer stays allowed under CFA,
         // so the manual fallback this reason routes to still works.
@@ -312,7 +315,7 @@ public sealed class PortableUpdater : IPortableSwapper
             // and a leftover probe file would violate the portable-cleanliness rule.
             try { if (File.Exists(probe)) File.Delete(probe); } catch { }
             try { if (File.Exists(probe + ".r")) File.Delete(probe + ".r"); } catch { }
-            return new(false, "Nexus cannot write to its own folder here (folder protection, permissions, or read-only media)");
+            return new(false, "SC-navLink cannot write to its own folder here (folder protection, permissions, or read-only media)");
         }
         // Free space: the staging copy coexists with the originals, so the install volume
         // transiently needs roughly twice the payload; the data volume needs zip plus
@@ -345,7 +348,7 @@ public sealed class PortableUpdater : IPortableSwapper
 
         // Upgrade re-asserted against the ON-DISK exe, not just this process: a stale
         // instance must never re-apply its download over an already-updated folder.
-        var baseline = OnDiskVersionOrFallback(Path.Combine(_installDir, "NexusApp.exe"), currentVersion);
+        var baseline = OnDiskVersionOrFallback(Path.Combine(_installDir, AppIdentity.ExeFileName), currentVersion);
         if (!UpdateVerifier.IsUpgrade(baseline, version.ToString(3)))
             return new(PortableApplyOutcome.FailedNothingChanged, "the update is not newer than the installed version");
 
@@ -368,11 +371,11 @@ public sealed class PortableUpdater : IPortableSwapper
             // Starting a new swap would overwrite the journal and take those files with it.
             if (File.Exists(_journalPath))
                 return new(PortableApplyOutcome.FailedNothingChanged,
-                           "a previous update has not finished; restart Nexus and try again");
+                           "a previous update has not finished; restart SC-navLink and try again");
 
             Logger.Info($"{UpdateService.Tag} unpack started");
             ExtractResult extracted;
-            var stagedRoot = Path.Combine(_updatesDir, version.ToString(3), "staged", "NexusApp");
+            var stagedRoot = Path.Combine(_updatesDir, version.ToString(3), "staged", AppIdentity.PortableZipRoot);
             try { extracted = VerifyAndExtract(zipPath, expectedSha256, stagedRoot); }
             catch (Exception ex) { return new(PortableApplyOutcome.FailedNothingChanged, ex.Message); }
             Logger.Info($"{UpdateService.Tag} unpack complete, hash re-verified ({extracted.FileHashes.Count} files)");
@@ -405,14 +408,14 @@ public sealed class PortableUpdater : IPortableSwapper
 
     // Two-phase core. Phase order per file: re-verify the staged bytes, clear any stale .old,
     // journal the intent (write-ahead), rename current -> .old, rename staged -> current.
-    // NexusApp.exe goes strictly LAST so every earlier failure rolls back without ever
+    // SC-navLink.exe goes strictly LAST so every earlier failure rolls back without ever
     // touching the running image.
     private PortableApplyResult Flip(ExtractResult extracted, string stagingDir, Version version, string currentVersion)
     {
         var rels = extracted.FileHashes.Keys
-            .Where(r => !string.Equals(r, "NexusApp.exe", StringComparison.OrdinalIgnoreCase))
+            .Where(r => !string.Equals(r, AppIdentity.ExeFileName, StringComparison.OrdinalIgnoreCase))
             .OrderBy(r => r, StringComparer.OrdinalIgnoreCase)
-            .Append("NexusApp.exe")
+            .Append(AppIdentity.ExeFileName)
             .ToList();
 
         // Reparse sweep over every directory a flip touches: a planted junction must never
@@ -860,7 +863,7 @@ public sealed class PortableUpdater : IPortableSwapper
         try
         {
             Logger.Info($"{UpdateService.Tag} unpack started");
-            var stagedRoot = Path.Combine(_updatesDir, version.ToString(3), "staged", "NexusApp");
+            var stagedRoot = Path.Combine(_updatesDir, version.ToString(3), "staged", AppIdentity.PortableZipRoot);
             VerifyAndExtract(zipPath, expectedSha256, stagedRoot);
             Logger.Info($"{UpdateService.Tag} unpack complete, hash re-verified");
             _openFolder(stagedRoot);

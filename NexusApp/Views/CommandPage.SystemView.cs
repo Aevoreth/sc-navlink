@@ -479,7 +479,7 @@ public sealed partial class CommandPage
             Text = cur.Duration is { } d
                 ? cur.Live ? $"Joined {d} ago on {App.GameLogFeed.ActiveChannel}."
                            : $"Lasted {d}. You are not on a shard now."
-                : "Nexus cannot tell how long this shard lasted.",
+                : "SC-navLink cannot tell how long this shard lasted.",
             FontFamily = Ui, FontSize = 11, Foreground = Br("FgDimBrush"),
             Margin = new Thickness(0, 3, 0, 0), TextWrapping = TextWrapping.Wrap,
         });

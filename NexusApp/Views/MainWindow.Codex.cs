@@ -646,7 +646,7 @@ public partial class MainWindow
                 VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0),
                 ToolTip = $"Players reported {liveSign}{live.BonusPct}% here "
                         + $"({MarketNotice.FormatAge(DateTime.UtcNow - live.ModifiedUtc)}). "
-                        + $"Nexus shows its own {(y.ModifierPct > 0 ? "+" : "")}{y.ModifierPct}% figure.",
+                        + $"SC-navLink shows its own {(y.ModifierPct > 0 ? "+" : "")}{y.ModifierPct}% figure.",
             };
             Grid.SetColumn(reported, 2); rg.Children.Add(reported);
         }

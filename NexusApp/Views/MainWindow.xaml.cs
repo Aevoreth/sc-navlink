@@ -284,8 +284,8 @@ public partial class MainWindow : Window
         // looking in Task Manager rather than the notification area.
         if (App.Settings?.Current is { TrayHintShown: false } s)
         {
-            _tray?.ShowHint("Nexus is still running",
-                "Nexus is in the notification area. Click its icon to open it, or right-click for Exit.");
+            _tray?.ShowHint("SC-navLink is still running",
+                "SC-navLink is in the notification area. Click its icon to open it, or right-click for Exit.");
             s.TrayHintShown = true;
             App.Settings.Save();
         }
@@ -294,7 +294,7 @@ public partial class MainWindow : Window
     private void EnsureTray()
     {
         if (_tray != null) return;
-        _tray = new TrayIcon("Nexus");
+        _tray = new TrayIcon("SC-navLink");
         _tray.OpenRequested += RestoreFromTray;
         // A real exit: Shutdown() never posts WM_CLOSE, so this cannot be re-intercepted above.
         _tray.ExitRequested += () =>
@@ -491,21 +491,21 @@ public partial class MainWindow : Window
 
         Title = page switch
         {
-            "command"    => "Nexus - Operations",
-            "scan"       => "Nexus - RS Signal Decoder",
-            "blueprints" => "Nexus - Blueprint Library",
-            "reference"  => "Nexus - Mining Codex",
-            "workorders" => "Nexus - Refinery Tracker",
-            "network"    => "Nexus - Blueprint Network",
-            "hauling"    => "Nexus - Cargo Hauling",
-            "guides"     => "Nexus - Mission Guides",
-            "trade"      => "Nexus - Trade",
-            "map"        => "Nexus - Starmap",
-            "planner"    => "Nexus - Cargo Planner",
-            "gridstudio" => "Nexus - Grid Studio",
-            "admin"      => "Nexus - Admin",
-            "settings"   => "Nexus - Settings",
-            _            => "Nexus",
+            "command"    => "SC-navLink - Operations",
+            "scan"       => "SC-navLink - RS Signal Decoder",
+            "blueprints" => "SC-navLink - Blueprint Library",
+            "reference"  => "SC-navLink - Mining Codex",
+            "workorders" => "SC-navLink - Refinery Tracker",
+            "network"    => "SC-navLink - Blueprint Network",
+            "hauling"    => "SC-navLink - Cargo Hauling",
+            "guides"     => "SC-navLink - Mission Guides",
+            "trade"      => "SC-navLink - Trade",
+            "map"        => "SC-navLink - Starmap",
+            "planner"    => "SC-navLink - Cargo Planner",
+            "gridstudio" => "SC-navLink - Grid Studio",
+            "admin"      => "SC-navLink - Admin",
+            "settings"   => "SC-navLink - Settings",
+            _            => "SC-navLink",
         };
 
         if (page == "blueprints") InitBlueprintBrowse();

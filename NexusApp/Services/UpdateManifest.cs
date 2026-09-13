@@ -45,7 +45,7 @@ public sealed class UpdateManifest
 
     // The only asset names this app will ever download. Fixed here, never read from
     // the manifest, so a manifest string can never influence a filesystem path or URL.
-    public static readonly string[] KnownAssetNames = ["Nexus_Setup.exe", "NexusApp_portable.zip"];
+    public static readonly string[] KnownAssetNames = [AppIdentity.SetupAssetName, AppIdentity.PortableAssetName];
 
     public int Schema { get; init; }
     public Version Version { get; init; } = new(0, 0, 0);

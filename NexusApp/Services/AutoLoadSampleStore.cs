@@ -10,9 +10,7 @@ public sealed class AutoLoadSampleStore
     private readonly object _gate = new();
 
     public AutoLoadSampleStore(string? path = null)
-        => _path = path ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "NexusApp", "autoload_samples.json");
+        => _path = path ?? Path.Combine(AppPaths.Root, "autoload_samples.json");
 
     public void Append(AutoLoadSample sample)
     {

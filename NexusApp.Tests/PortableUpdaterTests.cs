@@ -35,7 +35,7 @@ public class PortableUpdaterTests : IDisposable
             ProgramFilesX86: Path.Combine(root, "Program Files (x86)"),
             WindowsDir: Path.Combine(root, "Windows"),
             LocalAppData: Path.Combine(root, "LocalAppData"),
-            AppDataRoot: Path.Combine(root, "AppData", "NexusApp"));
+            AppDataRoot: Path.Combine(root, "AppData", "sc-navlink"));
         return (env, root);
     }
 
@@ -45,8 +45,8 @@ public class PortableUpdaterTests : IDisposable
     public void PreflightPathIssue_HappyPath_ReturnsNull()
     {
         var (env, root) = FakeEnv();
-        var install = Path.Combine(root, "PortableApps", "NexusApp");
-        Assert.Null(PortableUpdater.PreflightPathIssue(Path.Combine(install, "NexusApp.exe"), install, env));
+        var install = Path.Combine(root, "PortableApps", "sc-navlink");
+        Assert.Null(PortableUpdater.PreflightPathIssue(Path.Combine(install, "SC-navLink.exe"), install, env));
     }
 
     [Fact]
@@ -69,7 +69,7 @@ public class PortableUpdaterTests : IDisposable
     {
         var (env, root) = FakeEnv();
         Assert.NotNull(PortableUpdater.PreflightPathIssue(
-            Path.Combine(root, "a", "NexusApp.exe"), Path.Combine(root, "b"), env));
+            Path.Combine(root, "a", "SC-navLink.exe"), Path.Combine(root, "b"), env));
     }
 
     [Theory]
@@ -80,16 +80,16 @@ public class PortableUpdaterTests : IDisposable
     public void PreflightPathIssue_ForbiddenRoots_Refuse(string sub)
     {
         var (env, root) = FakeEnv();
-        var install = Path.Combine(root, sub, "NexusApp");
-        Assert.NotNull(PortableUpdater.PreflightPathIssue(Path.Combine(install, "NexusApp.exe"), install, env));
+        var install = Path.Combine(root, sub, "sc-navlink");
+        Assert.NotNull(PortableUpdater.PreflightPathIssue(Path.Combine(install, "SC-navLink.exe"), install, env));
     }
 
     [Fact]
     public void PreflightPathIssue_AppDataRoot_Refuses()
     {
         var (env, root) = FakeEnv();
-        var install = Path.Combine(root, "AppData", "NexusApp", "updates", "6.9.0", "staged", "NexusApp");
-        Assert.NotNull(PortableUpdater.PreflightPathIssue(Path.Combine(install, "NexusApp.exe"), install, env));
+        var install = Path.Combine(root, "AppData", "sc-navlink", "updates", "6.9.0", "staged", "sc-navlink");
+        Assert.NotNull(PortableUpdater.PreflightPathIssue(Path.Combine(install, "SC-navLink.exe"), install, env));
     }
 
     [Fact]
@@ -97,7 +97,9 @@ public class PortableUpdaterTests : IDisposable
     {
         var (env, root) = FakeEnv();
         var install = Path.Combine(root, "LocalAppData", "Nexus");
-        Assert.NotNull(PortableUpdater.PreflightPathIssue(Path.Combine(install, "NexusApp.exe"), install, env));
+        Assert.NotNull(PortableUpdater.PreflightPathIssue(Path.Combine(install, "SC-navLink.exe"), install, env));
+        var currentInstall = Path.Combine(root, "LocalAppData", "SC-navLink");
+        Assert.NotNull(PortableUpdater.PreflightPathIssue(Path.Combine(currentInstall, "SC-navLink.exe"), currentInstall, env));
     }
 
     [Fact]
@@ -105,7 +107,7 @@ public class PortableUpdaterTests : IDisposable
     {
         var (env, _) = FakeEnv();
         Assert.NotNull(PortableUpdater.PreflightPathIssue(
-            @"\\server\share\NexusApp\NexusApp.exe", @"\\server\share\NexusApp", env));
+            @"\\server\share\sc-navlink\SC-navLink.exe", @"\\server\share\sc-navlink", env));
     }
 
     [Fact]
@@ -113,17 +115,17 @@ public class PortableUpdaterTests : IDisposable
     {
         var (env, root) = FakeEnv();
         var install = Path.Combine(root, new string('a', 210));
-        Assert.NotNull(PortableUpdater.PreflightPathIssue(Path.Combine(install, "NexusApp.exe"), install, env));
+        Assert.NotNull(PortableUpdater.PreflightPathIssue(Path.Combine(install, "SC-navLink.exe"), install, env));
     }
 
     // ---- NormalizeEntry (zip entry hardening) ----
 
     [Theory]
-    [InlineData("NexusApp/NexusApp.exe", "NexusApp.exe")]
-    [InlineData("NexusApp/Web/cargo/index.html", @"Web\cargo\index.html")]
-    [InlineData(@"NexusApp\e_sqlite3.dll", "e_sqlite3.dll")]
-    [InlineData("NexusApp/", "")]                 // the top-level folder entry itself
-    [InlineData("NexusApp/Web/", "Web")]          // directory entry
+    [InlineData("sc-navlink/SC-navLink.exe", "SC-navLink.exe")]
+    [InlineData("sc-navlink/Web/cargo/index.html", @"Web\cargo\index.html")]
+    [InlineData(@"sc-navlink\e_sqlite3.dll", "e_sqlite3.dll")]
+    [InlineData("sc-navlink/", "")]                 // the top-level folder entry itself
+    [InlineData("sc-navlink/Web/", "Web")]          // directory entry
     public void NormalizeEntry_Accepts(string entry, string expectedRel)
     {
         Assert.Null(PortableUpdater.NormalizeEntry(entry, out var rel));
@@ -132,24 +134,24 @@ public class PortableUpdaterTests : IDisposable
 
     [Theory]
     [InlineData("loose.txt")]                          // outside the NexusApp top folder
-    [InlineData("Other/NexusApp.exe")]
-    [InlineData("NexusApp/../evil.txt")]               // traversal
+    [InlineData("Other/SC-navLink.exe")]
+    [InlineData("sc-navlink/../evil.txt")]               // traversal
     [InlineData(@"NexusApp\..\evil.txt")]
-    [InlineData("/NexusApp/NexusApp.exe")]             // rooted
-    [InlineData(@"C:\NexusApp\NexusApp.exe")]          // drive letter (also caught by colon)
-    [InlineData("NexusApp/a:b.txt")]                   // alternate data stream
-    [InlineData("NexusApp/install.marker")]            // would flip Distribution to Installer
-    [InlineData("NexusApp/Web/install.marker")]
-    [InlineData("NexusApp/update_journal.json")]       // collides with swap bookkeeping
-    [InlineData("NexusApp/update.lock")]
-    [InlineData("NexusApp/NexusApp.exe.old")]
-    [InlineData("NexusApp/e_sqlite3.dll.new")]
-    [InlineData("NexusApp/update-staging/x.txt")]
-    [InlineData("NexusApp/CON.txt")]                   // reserved device name
-    [InlineData("NexusApp/lpt1")]
-    [InlineData("NexusApp/trailingdot./x.txt")]
-    [InlineData("NexusApp/trailing.dll ")]             // trailing space
-    [InlineData("NexusApp/./x.txt")]
+    [InlineData("/sc-navlink/SC-navLink.exe")]             // rooted
+    [InlineData(@"C:\NexusApp\SC-navLink.exe")]          // drive letter (also caught by colon)
+    [InlineData("sc-navlink/a:b.txt")]                   // alternate data stream
+    [InlineData("sc-navlink/install.marker")]            // would flip Distribution to Installer
+    [InlineData("sc-navlink/Web/install.marker")]
+    [InlineData("sc-navlink/update_journal.json")]       // collides with swap bookkeeping
+    [InlineData("sc-navlink/update.lock")]
+    [InlineData("sc-navlink/SC-navLink.exe.old")]
+    [InlineData("sc-navlink/e_sqlite3.dll.new")]
+    [InlineData("sc-navlink/update-staging/x.txt")]
+    [InlineData("sc-navlink/CON.txt")]                   // reserved device name
+    [InlineData("sc-navlink/lpt1")]
+    [InlineData("sc-navlink/trailingdot./x.txt")]
+    [InlineData("sc-navlink/trailing.dll ")]             // trailing space
+    [InlineData("sc-navlink/./x.txt")]
     [InlineData("")]
     public void NormalizeEntry_Rejects(string entry) =>
         Assert.NotNull(PortableUpdater.NormalizeEntry(entry, out _));
@@ -177,20 +179,20 @@ public class PortableUpdaterTests : IDisposable
 
     private static (string name, string content)[] GoodEntries() => new[]
     {
-        ("NexusApp/NexusApp.exe", "new exe bytes"),
-        ("NexusApp/e_sqlite3.dll", "new sqlite bytes"),
-        ("NexusApp/wpfgfx_cor3.dll", "new wpf bytes"),
-        ("NexusApp/README.txt", "new readme"),
-        ("NexusApp/Web/cargo/index.html", "new page"),
+        ("sc-navlink/SC-navLink.exe", "new exe bytes"),
+        ("sc-navlink/e_sqlite3.dll", "new sqlite bytes"),
+        ("sc-navlink/wpfgfx_cor3.dll", "new wpf bytes"),
+        ("sc-navlink/README.txt", "new readme"),
+        ("sc-navlink/Web/cargo/index.html", "new page"),
     };
 
     [Fact]
     public void VerifyAndExtract_HappyPath_ExtractsAndHashes()
     {
         var (zip, hash) = MakeZip(GoodEntries());
-        var dest = Path.Combine(TempDir(), "staged", "NexusApp");
+        var dest = Path.Combine(TempDir(), "staged", "sc-navlink");
         var result = PortableUpdater.VerifyAndExtract(zip, hash, dest);
-        Assert.Equal("new exe bytes", File.ReadAllText(Path.Combine(dest, "NexusApp.exe")));
+        Assert.Equal("new exe bytes", File.ReadAllText(Path.Combine(dest, "SC-navLink.exe")));
         Assert.Equal("new page", File.ReadAllText(Path.Combine(dest, "Web", "cargo", "index.html")));
         Assert.Equal(5, result.FileHashes.Count);
         Assert.Equal(HashHex(System.Text.Encoding.UTF8.GetBytes("new page")), result.FileHashes[@"Web\cargo\index.html"]);
@@ -202,33 +204,33 @@ public class PortableUpdaterTests : IDisposable
     public void VerifyAndExtract_WrongZipHash_RefusesBeforeExtracting()
     {
         var (zip, _) = MakeZip(GoodEntries());
-        var dest = Path.Combine(TempDir(), "staged", "NexusApp");
+        var dest = Path.Combine(TempDir(), "staged", "sc-navlink");
         Assert.Throws<InvalidOperationException>(() =>
             PortableUpdater.VerifyAndExtract(zip, new string('a', 64), dest));
         Assert.False(Directory.Exists(dest));   // nothing may land before the hash gate
     }
 
     [Theory]
-    [InlineData("NexusApp/../evil.txt")]
-    [InlineData("NexusApp/install.marker")]
-    [InlineData("NexusApp/x.dll.old")]
-    [InlineData("NexusApp/x.dll.new")]
-    [InlineData("NexusApp/update_journal.json")]
-    [InlineData("NexusApp/update.lock")]
-    [InlineData("NexusApp/update-staging/x.txt")]
+    [InlineData("sc-navlink/../evil.txt")]
+    [InlineData("sc-navlink/install.marker")]
+    [InlineData("sc-navlink/x.dll.old")]
+    [InlineData("sc-navlink/x.dll.new")]
+    [InlineData("sc-navlink/update_journal.json")]
+    [InlineData("sc-navlink/update.lock")]
+    [InlineData("sc-navlink/update-staging/x.txt")]
     [InlineData("loose.txt")]
     public void VerifyAndExtract_HostileEntry_Refuses(string hostile)
     {
         var entries = GoodEntries().Append((hostile, "evil")).ToArray();
         var (zip, hash) = MakeZip(entries);
-        var dest = Path.Combine(TempDir(), "staged", "NexusApp");
+        var dest = Path.Combine(TempDir(), "staged", "sc-navlink");
         Assert.Throws<InvalidOperationException>(() => PortableUpdater.VerifyAndExtract(zip, hash, dest));
     }
 
     [Fact]
     public void VerifyAndExtract_MissingExe_Refuses()
     {
-        var (zip, hash) = MakeZip(("NexusApp/README.txt", "no exe here"));
+        var (zip, hash) = MakeZip(("sc-navlink/README.txt", "no exe here"));
         Assert.Throws<InvalidOperationException>(() =>
             PortableUpdater.VerifyAndExtract(zip, hash, Path.Combine(TempDir(), "s")));
     }
@@ -253,7 +255,7 @@ public class PortableUpdaterTests : IDisposable
     public void VerifyAndExtract_ReplacesAStaleStagedTree()
     {
         var (zip, hash) = MakeZip(GoodEntries());
-        var dest = Path.Combine(TempDir(), "staged", "NexusApp");
+        var dest = Path.Combine(TempDir(), "staged", "sc-navlink");
         Directory.CreateDirectory(dest);
         File.WriteAllText(Path.Combine(dest, "stale.txt"), "from a crashed run");
         PortableUpdater.VerifyAndExtract(zip, hash, dest);
@@ -268,18 +270,18 @@ public class PortableUpdaterTests : IDisposable
         MakeApplyRig(string currentOnDisk = "old", Func<int>? processCount = null, Func<string>? distribution = null)
     {
         var (env, root) = FakeEnv();
-        var install = Path.Combine(root, "PortableApps", "NexusApp");
+        var install = Path.Combine(root, "PortableApps", "sc-navlink");
         Directory.CreateDirectory(Path.Combine(install, "Web", "cargo"));
-        File.WriteAllText(Path.Combine(install, "NexusApp.exe"), currentOnDisk + " exe");
+        File.WriteAllText(Path.Combine(install, "SC-navLink.exe"), currentOnDisk + " exe");
         File.WriteAllText(Path.Combine(install, "e_sqlite3.dll"), currentOnDisk + " sqlite");
         File.WriteAllText(Path.Combine(install, "wpfgfx_cor3.dll"), currentOnDisk + " wpf");
         File.WriteAllText(Path.Combine(install, "README.txt"), currentOnDisk + " readme");
         File.WriteAllText(Path.Combine(install, "Web", "cargo", "index.html"), currentOnDisk + " page");
-        var updates = Path.Combine(root, "AppData", "NexusApp", "updates");
-        var journal = Path.Combine(root, "AppData", "NexusApp", SwapJournal.FileName);
+        var updates = Path.Combine(root, "AppData", "sc-navlink", "updates");
+        var journal = Path.Combine(root, "AppData", "sc-navlink", SwapJournal.FileName);
         Directory.CreateDirectory(Path.GetDirectoryName(journal)!);
         var (zip, zipHash) = MakeZip(GoodEntries());
-        var up = new PortableUpdater(install, Path.Combine(install, "NexusApp.exe"), updates, journal,
+        var up = new PortableUpdater(install, Path.Combine(install, "SC-navLink.exe"), updates, journal,
             distribution ?? (() => "Portable"), env,
             retryDelaysMs: new[] { 1, 1 }, nexusProcessCount: processCount ?? (() => 1),
             openFolder: _ => { });
@@ -308,7 +310,7 @@ public class PortableUpdaterTests : IDisposable
         var (up, _, _, _, _, _) = MakeApplyRig(processCount: () => 2);
         var pre = up.Preflight(1000);
         Assert.False(pre.Ok);
-        Assert.Contains("another Nexus", pre.Reason);
+        Assert.Contains("another SC-navLink", pre.Reason);
     }
 
     [Fact]
@@ -324,9 +326,9 @@ public class PortableUpdaterTests : IDisposable
         var (up, install, _, journal, zip, hash) = MakeApplyRig();
         var result = up.Apply(zip, hash, new Version(6, 9, 0), "6.8.1");
         Assert.Equal(PortableApplyOutcome.Completed, result.Outcome);
-        Assert.Equal("new exe bytes", File.ReadAllText(Path.Combine(install, "NexusApp.exe")));
+        Assert.Equal("new exe bytes", File.ReadAllText(Path.Combine(install, "SC-navLink.exe")));
         Assert.Equal("new page", File.ReadAllText(Path.Combine(install, "Web", "cargo", "index.html")));
-        Assert.Equal("old exe", File.ReadAllText(Path.Combine(install, "NexusApp.exe.old")));
+        Assert.Equal("old exe", File.ReadAllText(Path.Combine(install, "SC-navLink.exe.old")));
         Assert.False(Directory.Exists(Path.Combine(install, PortableUpdater.StagingDirName)));
         Assert.True(File.Exists(zip));   // the crash-recovery artifact survives until the new version's first start
         var back = SwapJournal.TryLoad(journal);
@@ -342,7 +344,7 @@ public class PortableUpdaterTests : IDisposable
         var (up, install, _, journal, zip, hash) = MakeApplyRig();
         var result = up.Apply(zip, hash, new Version(6, 9, 0), "6.9.0");   // same version: not strictly greater
         Assert.Equal(PortableApplyOutcome.FailedNothingChanged, result.Outcome);
-        Assert.Equal("old exe", File.ReadAllText(Path.Combine(install, "NexusApp.exe")));
+        Assert.Equal("old exe", File.ReadAllText(Path.Combine(install, "SC-navLink.exe")));
         Assert.False(File.Exists(journal));
     }
 
@@ -352,7 +354,7 @@ public class PortableUpdaterTests : IDisposable
         var (up, install, _, journal, zip, _) = MakeApplyRig();
         var result = up.Apply(zip, new string('a', 64), new Version(6, 9, 0), "6.8.1");
         Assert.Equal(PortableApplyOutcome.FailedNothingChanged, result.Outcome);
-        Assert.Equal("old exe", File.ReadAllText(Path.Combine(install, "NexusApp.exe")));
+        Assert.Equal("old exe", File.ReadAllText(Path.Combine(install, "SC-navLink.exe")));
         Assert.False(File.Exists(journal));
     }
 
@@ -365,10 +367,10 @@ public class PortableUpdaterTests : IDisposable
             FileMode.Open, FileAccess.Read, FileShare.Read);
         var result = up.Apply(zip, hash, new Version(6, 9, 0), "6.8.1");
         Assert.Equal(PortableApplyOutcome.FailedRolledBack, result.Outcome);
-        Assert.Equal("old exe", File.ReadAllText(Path.Combine(install, "NexusApp.exe")));
+        Assert.Equal("old exe", File.ReadAllText(Path.Combine(install, "SC-navLink.exe")));
         Assert.Equal("old sqlite", File.ReadAllText(Path.Combine(install, "e_sqlite3.dll")));
         Assert.Equal("old page", File.ReadAllText(Path.Combine(install, "Web", "cargo", "index.html")));
-        Assert.False(File.Exists(Path.Combine(install, "NexusApp.exe.old")));
+        Assert.False(File.Exists(Path.Combine(install, "SC-navLink.exe.old")));
         Assert.False(File.Exists(journal));
         Assert.False(Directory.Exists(Path.Combine(install, PortableUpdater.StagingDirName)));
     }
@@ -382,7 +384,7 @@ public class PortableUpdaterTests : IDisposable
         var result = up.Apply(zip, hash, new Version(6, 9, 0), "6.8.1");
         Assert.Equal(PortableApplyOutcome.Completed, result.Outcome);
         Assert.Equal("old readme", File.ReadAllText(Path.Combine(install, "README.txt")));   // kept, not fatal
-        Assert.Equal("new exe bytes", File.ReadAllText(Path.Combine(install, "NexusApp.exe")));
+        Assert.Equal("new exe bytes", File.ReadAllText(Path.Combine(install, "SC-navLink.exe")));
         var back = SwapJournal.TryLoad(journal);
         Assert.Contains(back!.Ops, o => o.Rel == "README.txt" && o.Skipped);
     }
@@ -398,7 +400,7 @@ public class PortableUpdaterTests : IDisposable
         var result = up.Apply(zip, hash, new Version(6, 9, 0), "6.8.1");
         Assert.Equal(PortableApplyOutcome.FailedRolledBack, result.Outcome);
         Assert.Contains("changed between unpack and install", result.Reason);
-        Assert.Equal("old exe", File.ReadAllText(Path.Combine(install, "NexusApp.exe")));
+        Assert.Equal("old exe", File.ReadAllText(Path.Combine(install, "SC-navLink.exe")));
         Assert.Equal("old sqlite", File.ReadAllText(Path.Combine(install, "e_sqlite3.dll")));
     }
 
@@ -422,12 +424,12 @@ public class PortableUpdaterTests : IDisposable
         var badJournal = Path.Combine(Path.GetDirectoryName(install)!, "journal-as-dir");
         Directory.CreateDirectory(badJournal);
         var env = FakeEnvFor(install);
-        var up = new PortableUpdater(install, Path.Combine(install, "NexusApp.exe"), updates, badJournal,
+        var up = new PortableUpdater(install, Path.Combine(install, "SC-navLink.exe"), updates, badJournal,
             () => "Portable", env, retryDelaysMs: new[] { 1, 1 }, nexusProcessCount: () => 1, openFolder: _ => { });
         var result = up.Apply(zip, hash, new Version(6, 9, 0), "6.8.1");
         Assert.Equal(PortableApplyOutcome.FailedNothingChanged, result.Outcome);
-        Assert.Equal("old exe", File.ReadAllText(Path.Combine(install, "NexusApp.exe")));
-        Assert.False(File.Exists(Path.Combine(install, "NexusApp.exe.old")));
+        Assert.Equal("old exe", File.ReadAllText(Path.Combine(install, "SC-navLink.exe")));
+        Assert.False(File.Exists(Path.Combine(install, "SC-navLink.exe.old")));
         Assert.False(Directory.Exists(Path.Combine(install, PortableUpdater.StagingDirName)));
     }
 
@@ -439,17 +441,17 @@ public class PortableUpdaterTests : IDisposable
         return new PortableEnv(
             Path.Combine(root, "Temp"), Path.Combine(root, "Program Files"),
             Path.Combine(root, "Program Files (x86)"), Path.Combine(root, "Windows"),
-            Path.Combine(root, "LocalAppData"), Path.Combine(root, "AppData", "NexusApp"));
+            Path.Combine(root, "LocalAppData"), Path.Combine(root, "AppData", "sc-navlink"));
     }
 
     [Fact]
     public void Apply_StaleOldFile_IsClearedAndSwapCompletes()
     {
         var (up, install, _, _, zip, hash) = MakeApplyRig();
-        File.WriteAllText(Path.Combine(install, "NexusApp.exe.old"), "stale from a previous failed swap");
+        File.WriteAllText(Path.Combine(install, "SC-navLink.exe.old"), "stale from a previous failed swap");
         var result = up.Apply(zip, hash, new Version(6, 9, 0), "6.8.1");
         Assert.Equal(PortableApplyOutcome.Completed, result.Outcome);
-        Assert.Equal("old exe", File.ReadAllText(Path.Combine(install, "NexusApp.exe.old")));   // the REAL previous exe, not the stale file
+        Assert.Equal("old exe", File.ReadAllText(Path.Combine(install, "SC-navLink.exe.old")));   // the REAL previous exe, not the stale file
     }
 
     [Fact]
@@ -469,7 +471,7 @@ public class PortableUpdaterTests : IDisposable
         var result = up.Apply(zip, hash, new Version(6, 9, 0), "6.8.1");
         Assert.Equal(PortableApplyOutcome.FailedNothingChanged, result.Outcome);
         Assert.Contains("previous update has not finished", result.Reason);
-        Assert.Equal("old exe", File.ReadAllText(Path.Combine(install, "NexusApp.exe")));
+        Assert.Equal("old exe", File.ReadAllText(Path.Combine(install, "SC-navLink.exe")));
         Assert.Equal(before, File.ReadAllBytes(journal));
         Assert.False(Directory.Exists(Path.Combine(install, PortableUpdater.StagingDirName)));
     }
@@ -486,7 +488,7 @@ public class PortableUpdaterTests : IDisposable
         FileStream? hold = null;
         up.BeforeFlipHook = (stagedPath, rel) =>
         {
-            if (rel != "NexusApp.exe") return;   // the exe flips last, after every other file
+            if (rel != "SC-navLink.exe") return;   // the exe flips last, after every other file
             hold = new FileStream(Path.Combine(install, "e_sqlite3.dll"),
                 FileMode.Open, FileAccess.Read, FileShare.Read);
             File.WriteAllText(stagedPath, "tampered after extraction");
@@ -510,7 +512,7 @@ public class PortableUpdaterTests : IDisposable
     private (string install, string journalPath) MakeRecoveryRig()
     {
         var root = TempDir();
-        var install = Path.Combine(root, "NexusApp");
+        var install = Path.Combine(root, "sc-navlink");
         Directory.CreateDirectory(Path.Combine(install, "Web", "cargo"));
         return (install, Path.Combine(root, SwapJournal.FileName));
     }
@@ -540,20 +542,20 @@ public class PortableUpdaterTests : IDisposable
     public void Recover_CompleteJournal_CleansUpAndLeavesNewFiles()
     {
         var (install, journalPath) = MakeRecoveryRig();
-        File.WriteAllText(Path.Combine(install, "NexusApp.exe"), "new");
-        File.WriteAllText(Path.Combine(install, "NexusApp.exe.old"), "previous");
+        File.WriteAllText(Path.Combine(install, "SC-navLink.exe"), "new");
+        File.WriteAllText(Path.Combine(install, "SC-navLink.exe.old"), "previous");
         Directory.CreateDirectory(Path.Combine(install, PortableUpdater.StagingDirName));
         var j = new SwapJournal
         {
             Status = SwapJournal.StatusComplete, AttemptedVersion = "6.9.0", PreviousVersion = "6.8.1",
             InstallDir = install,
-            Ops = { new SwapOp { Rel = "NexusApp.exe", OldMoved = true, NewPlaced = true } },
+            Ops = { new SwapOp { Rel = "SC-navLink.exe", OldMoved = true, NewPlaced = true } },
         };
         j.Save(journalPath);
         var r = PortableUpdater.RecoverAtStartup(journalPath, install, "6.9.0", FastDelays);
         Assert.False(r.ShowSwapFailedNotice);
-        Assert.Equal("new", File.ReadAllText(Path.Combine(install, "NexusApp.exe")));
-        Assert.False(File.Exists(Path.Combine(install, "NexusApp.exe.old")));
+        Assert.Equal("new", File.ReadAllText(Path.Combine(install, "SC-navLink.exe")));
+        Assert.False(File.Exists(Path.Combine(install, "SC-navLink.exe.old")));
         Assert.False(Directory.Exists(Path.Combine(install, PortableUpdater.StagingDirName)));
         Assert.False(File.Exists(journalPath));
     }
@@ -568,7 +570,7 @@ public class PortableUpdaterTests : IDisposable
         File.WriteAllText(Path.Combine(install, "Web", "cargo", "index.html"), "new page");
         File.WriteAllText(Path.Combine(install, "Web", "cargo", "index.html.old"), "old page");
         File.WriteAllText(Path.Combine(install, "brandnew.dll"), "added in 6.9.0");
-        File.WriteAllText(Path.Combine(install, "NexusApp.exe"), "old exe");   // exe never flipped
+        File.WriteAllText(Path.Combine(install, "SC-navLink.exe"), "old exe");   // exe never flipped
         var j = new SwapJournal
         {
             Status = SwapJournal.StatusInProgress, AttemptedVersion = "6.9.0", PreviousVersion = "6.8.1",
@@ -624,19 +626,19 @@ public class PortableUpdaterTests : IDisposable
         // A restore attempt that parked a .new can later heal into the completed branch (the
         // running exe turns out to BE the attempted version); the cleanup owns the residue.
         var (install, journalPath) = MakeRecoveryRig();
-        File.WriteAllText(Path.Combine(install, "NexusApp.exe"), "new");
-        File.WriteAllText(Path.Combine(install, "NexusApp.exe" + PortableUpdater.NewSuffix), "parked by an earlier pass");
+        File.WriteAllText(Path.Combine(install, "SC-navLink.exe"), "new");
+        File.WriteAllText(Path.Combine(install, "SC-navLink.exe" + PortableUpdater.NewSuffix), "parked by an earlier pass");
         var j = new SwapJournal
         {
             Status = SwapJournal.StatusComplete, AttemptedVersion = "6.9.0", PreviousVersion = "6.8.1",
             InstallDir = install,
-            Ops = { new SwapOp { Rel = "NexusApp.exe", OldMoved = true, NewPlaced = true } },
+            Ops = { new SwapOp { Rel = "SC-navLink.exe", OldMoved = true, NewPlaced = true } },
         };
         j.Save(journalPath);
         var r = PortableUpdater.RecoverAtStartup(journalPath, install, "6.9.0", FastDelays);
         Assert.False(r.ShowSwapFailedNotice);
-        Assert.Equal("new", File.ReadAllText(Path.Combine(install, "NexusApp.exe")));
-        Assert.False(File.Exists(Path.Combine(install, "NexusApp.exe" + PortableUpdater.NewSuffix)));
+        Assert.Equal("new", File.ReadAllText(Path.Combine(install, "SC-navLink.exe")));
+        Assert.False(File.Exists(Path.Combine(install, "SC-navLink.exe" + PortableUpdater.NewSuffix)));
         Assert.False(File.Exists(journalPath));
     }
 
@@ -644,21 +646,21 @@ public class PortableUpdaterTests : IDisposable
     public void Recover_InProgressButRunningTheNewVersion_HealsToComplete()
     {
         var (install, journalPath) = MakeRecoveryRig();
-        File.WriteAllText(Path.Combine(install, "NexusApp.exe"), "new");
-        File.WriteAllText(Path.Combine(install, "NexusApp.exe.old"), "previous");
+        File.WriteAllText(Path.Combine(install, "SC-navLink.exe"), "new");
+        File.WriteAllText(Path.Combine(install, "SC-navLink.exe.old"), "previous");
         var j = new SwapJournal
         {
             Status = SwapJournal.StatusInProgress, AttemptedVersion = "6.9.0", PreviousVersion = "6.8.1",
             InstallDir = install,
-            Ops = { new SwapOp { Rel = "NexusApp.exe", OldMoved = true, NewPlaced = true } },
+            Ops = { new SwapOp { Rel = "SC-navLink.exe", OldMoved = true, NewPlaced = true } },
         };
         j.Save(journalPath);
         // The crash fell between the last flip and the Complete stamp, but the process now
         // RUNNING is the attempted version: the swap in fact finished.
         var r = PortableUpdater.RecoverAtStartup(journalPath, install, "6.9.0", FastDelays);
         Assert.False(r.ShowSwapFailedNotice);
-        Assert.Equal("new", File.ReadAllText(Path.Combine(install, "NexusApp.exe")));
-        Assert.False(File.Exists(Path.Combine(install, "NexusApp.exe.old")));
+        Assert.Equal("new", File.ReadAllText(Path.Combine(install, "SC-navLink.exe")));
+        Assert.False(File.Exists(Path.Combine(install, "SC-navLink.exe.old")));
         Assert.False(File.Exists(journalPath));
     }
 
@@ -668,19 +670,19 @@ public class PortableUpdaterTests : IDisposable
         // The guided manual flow can land a copy NEWER than the crashed swap attempted;
         // restoring the .old set over it would build a mixed folder.
         var (install, journalPath) = MakeRecoveryRig();
-        File.WriteAllText(Path.Combine(install, "NexusApp.exe"), "manually copied 6.9.1");
-        File.WriteAllText(Path.Combine(install, "NexusApp.exe.old"), "previous");
+        File.WriteAllText(Path.Combine(install, "SC-navLink.exe"), "manually copied 6.9.1");
+        File.WriteAllText(Path.Combine(install, "SC-navLink.exe.old"), "previous");
         var j = new SwapJournal
         {
             Status = SwapJournal.StatusInProgress, AttemptedVersion = "6.9.0", PreviousVersion = "6.8.1",
             InstallDir = install,
-            Ops = { new SwapOp { Rel = "NexusApp.exe", OldMoved = true, NewPlaced = true } },
+            Ops = { new SwapOp { Rel = "SC-navLink.exe", OldMoved = true, NewPlaced = true } },
         };
         j.Save(journalPath);
         var r = PortableUpdater.RecoverAtStartup(journalPath, install, "6.9.1", FastDelays);
         Assert.False(r.ShowSwapFailedNotice);
-        Assert.Equal("manually copied 6.9.1", File.ReadAllText(Path.Combine(install, "NexusApp.exe")));
-        Assert.False(File.Exists(Path.Combine(install, "NexusApp.exe.old")));
+        Assert.Equal("manually copied 6.9.1", File.ReadAllText(Path.Combine(install, "SC-navLink.exe")));
+        Assert.False(File.Exists(Path.Combine(install, "SC-navLink.exe.old")));
         Assert.False(File.Exists(journalPath));
     }
 
@@ -708,18 +710,18 @@ public class PortableUpdaterTests : IDisposable
     {
         var (install, journalPath) = MakeRecoveryRig();
         var otherInstall = TempDir();
-        File.WriteAllText(Path.Combine(otherInstall, "NexusApp.exe.old"), "other install's rollback");
+        File.WriteAllText(Path.Combine(otherInstall, "SC-navLink.exe.old"), "other install's rollback");
         var j = new SwapJournal
         {
             Status = SwapJournal.StatusComplete, AttemptedVersion = "6.9.0", PreviousVersion = "6.8.1",
             InstallDir = otherInstall,
-            Ops = { new SwapOp { Rel = "NexusApp.exe", OldMoved = true, NewPlaced = true } },
+            Ops = { new SwapOp { Rel = "SC-navLink.exe", OldMoved = true, NewPlaced = true } },
         };
         j.Save(journalPath);
         var r = PortableUpdater.RecoverAtStartup(journalPath, install, "6.8.1", FastDelays);
         Assert.False(r.ShowSwapFailedNotice);
         Assert.True(File.Exists(journalPath));   // the right instance handles it; the purge guard keeps its zip safe
-        Assert.True(File.Exists(Path.Combine(otherInstall, "NexusApp.exe.old")));
+        Assert.True(File.Exists(Path.Combine(otherInstall, "SC-navLink.exe.old")));
     }
 
     [Fact]
@@ -751,16 +753,16 @@ public class PortableUpdaterTests : IDisposable
     public void Recover_LockedOldFile_KeepsJournalForALaterStart()
     {
         var (install, journalPath) = MakeRecoveryRig();
-        File.WriteAllText(Path.Combine(install, "NexusApp.exe"), "new");
-        File.WriteAllText(Path.Combine(install, "NexusApp.exe.old"), "previous");
+        File.WriteAllText(Path.Combine(install, "SC-navLink.exe"), "new");
+        File.WriteAllText(Path.Combine(install, "SC-navLink.exe.old"), "previous");
         var j = new SwapJournal
         {
             Status = SwapJournal.StatusComplete, AttemptedVersion = "6.9.0", PreviousVersion = "6.8.1",
             InstallDir = install,
-            Ops = { new SwapOp { Rel = "NexusApp.exe", OldMoved = true, NewPlaced = true } },
+            Ops = { new SwapOp { Rel = "SC-navLink.exe", OldMoved = true, NewPlaced = true } },
         };
         j.Save(journalPath);
-        using var holder = new FileStream(Path.Combine(install, "NexusApp.exe.old"),
+        using var holder = new FileStream(Path.Combine(install, "SC-navLink.exe.old"),
             FileMode.Open, FileAccess.Read, FileShare.Read);   // no delete sharing: purge must fail quietly
         var r = PortableUpdater.RecoverAtStartup(journalPath, install, "6.9.0", FastDelays);
         Assert.False(r.ShowSwapFailedNotice);
@@ -864,17 +866,17 @@ public class PortableUpdaterTests : IDisposable
     public void UnpackForManual_ExtractsAndOpensBothFolders()
     {
         var (env, root) = FakeEnv();
-        var install = Path.Combine(root, "PortableApps", "NexusApp");
+        var install = Path.Combine(root, "PortableApps", "sc-navlink");
         Directory.CreateDirectory(install);
-        var updates = Path.Combine(root, "AppData", "NexusApp", "updates");
+        var updates = Path.Combine(root, "AppData", "sc-navlink", "updates");
         var opened = new List<string>();
         var (zip, hash) = MakeZip(GoodEntries());
-        var up = new PortableUpdater(install, Path.Combine(install, "NexusApp.exe"), updates,
+        var up = new PortableUpdater(install, Path.Combine(install, "SC-navLink.exe"), updates,
             Path.Combine(root, SwapJournal.FileName), () => "Portable", env,
             retryDelaysMs: new[] { 1, 1 }, nexusProcessCount: () => 1, openFolder: opened.Add);
         Assert.True(up.UnpackForManual(zip, hash, new Version(6, 9, 0)));
-        var staged = Path.Combine(updates, "6.9.0", "staged", "NexusApp");
-        Assert.Equal("new exe bytes", File.ReadAllText(Path.Combine(staged, "NexusApp.exe")));
+        var staged = Path.Combine(updates, "6.9.0", "staged", "sc-navlink");
+        Assert.Equal("new exe bytes", File.ReadAllText(Path.Combine(staged, "SC-navLink.exe")));
         Assert.Equal(new[] { staged, install }, opened);
     }
 
@@ -882,11 +884,11 @@ public class PortableUpdaterTests : IDisposable
     public void UnpackForManual_BadHash_FailsAndOpensNothing()
     {
         var (env, root) = FakeEnv();
-        var install = Path.Combine(root, "PortableApps", "NexusApp");
+        var install = Path.Combine(root, "PortableApps", "sc-navlink");
         Directory.CreateDirectory(install);
         var opened = new List<string>();
         var (zip, _) = MakeZip(GoodEntries());
-        var up = new PortableUpdater(install, Path.Combine(install, "NexusApp.exe"),
+        var up = new PortableUpdater(install, Path.Combine(install, "SC-navLink.exe"),
             Path.Combine(root, "updates"), Path.Combine(root, SwapJournal.FileName),
             () => "Portable", env, retryDelaysMs: new[] { 1, 1 }, nexusProcessCount: () => 1,
             openFolder: opened.Add);

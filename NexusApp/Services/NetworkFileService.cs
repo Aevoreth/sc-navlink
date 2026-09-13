@@ -25,7 +25,7 @@ public sealed class NetworkFileService
 
     /// <summary>Label written into the "app" field of exports (informational only). The UI sets it
     /// to include the version; defaults keep the service decoupled from AppInfo for tests.</summary>
-    public string AppLabel { get; set; } = "NexusApp";
+    public string AppLabel { get; set; } = AppIdentity.ProductName;
 
     private static readonly JsonSerializerOptions _opts = new()
     {

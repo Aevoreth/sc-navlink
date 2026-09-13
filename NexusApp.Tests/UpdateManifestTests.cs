@@ -19,8 +19,8 @@ public class UpdateManifestTests
           "version": "{{version}}",
           "published": "2026-07-25T18:00:00Z",
           "assets": [
-            { "name": "Nexus_Setup.exe", "sha256": "{{setupHash}}", "size": {{setupSize}} },
-            { "name": "NexusApp_portable.zip", "sha256": "{{portableHash}}", "size": {{portableSize}} }
+            { "name": "SC-navLink_Setup.exe", "sha256": "{{setupHash}}", "size": {{setupSize}} },
+            { "name": "sc-navlink_portable.zip", "sha256": "{{portableHash}}", "size": {{portableSize}} }
           ]
         }
         """;
@@ -35,7 +35,7 @@ public class UpdateManifestTests
         Assert.Equal(new Version(9, 9, 9), m.Version);
         Assert.Equal(2, m.Assets.Count);
         Assert.Equal(100, m.AssetFor("Installer")!.Size);
-        Assert.Equal("NexusApp_portable.zip", m.AssetFor("Portable")!.Name);
+        Assert.Equal("sc-navlink_portable.zip", m.AssetFor("Portable")!.Name);
         Assert.Null(m.AssetFor("Unknown"));
     }
 
@@ -76,7 +76,7 @@ public class UpdateManifestTests
     {
         var json = """
         { "schema": 1, "version": "9.9.9", "assets": [
-          { "name": "Nexus_Setup.exe", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "size": 1 } ] }
+          { "name": "SC-navLink_Setup.exe", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "size": 1 } ] }
         """;
         Assert.Throws<UpdateManifestException>(() => Parse(json));
     }
@@ -84,7 +84,7 @@ public class UpdateManifestTests
     [Fact]
     public void Parse_UnknownAssetName_Throws()
     {
-        var json = ValidJson().Replace("NexusApp_portable.zip", "Evil.exe");
+        var json = ValidJson().Replace("sc-navlink_portable.zip", "Evil.exe");
         Assert.Throws<UpdateManifestException>(() => Parse(json));
     }
 
@@ -93,7 +93,7 @@ public class UpdateManifestTests
     {
         // Two setup entries and no portable entry. The count-of-two guard passes, so the
         // exactly-once check per known name is the only thing rejecting this.
-        var json = ValidJson().Replace("NexusApp_portable.zip", "Nexus_Setup.exe");
+        var json = ValidJson().Replace("sc-navlink_portable.zip", "SC-navLink_Setup.exe");
         Assert.Throws<UpdateManifestException>(() => Parse(json));
     }
 
@@ -105,7 +105,7 @@ public class UpdateManifestTests
         var oneNull = """
         { "schema": 1, "version": "9.9.9", "assets": [
           null,
-          { "name": "Nexus_Setup.exe", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "size": 1 } ] }
+          { "name": "SC-navLink_Setup.exe", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "size": 1 } ] }
         """;
         Assert.Throws<UpdateManifestException>(() => Parse(oneNull));
 
@@ -134,8 +134,8 @@ public class UpdateManifestTests
     {
         var json = """
         { "schema": 1, "version": "9.9.9", "assets": [
-          { "name": "Nexus_Setup.exe", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "size": 1 },
-          { "name": "NexusApp_portable.zip", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "size": 2 } ] }
+          { "name": "SC-navLink_Setup.exe", "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "size": 1 },
+          { "name": "sc-navlink_portable.zip", "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "size": 2 } ] }
         """;
         var m = Parse(json);   // published is informational only; the signature covers it either way
         Assert.Equal(new Version(9, 9, 9), m.Version);

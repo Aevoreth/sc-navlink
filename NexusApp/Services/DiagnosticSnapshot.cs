@@ -21,7 +21,7 @@ public static class DiagnosticSnapshot
         string? previousLogContents = null)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("=== Nexus diagnostic snapshot ===");
+        sb.AppendLine("=== SC-navLink diagnostic snapshot ===");
         sb.AppendLine($"Taken: {timestamp:yyyy-MM-dd HH:mm:ss}");
         sb.AppendLine($"App version: {appVersion}");
         sb.AppendLine($"Star Citizen game data: {gameVersion}");

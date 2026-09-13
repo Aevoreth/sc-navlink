@@ -4,18 +4,18 @@ namespace NexusApp.Services;
 internal static class MarketNotice
 {
     public const string ConsentEyebrow = "Live market data";
-    public const string ConsentBody = "Nexus can show live market prices from UEX and SC Trade Tools, two community-run price databases. This uses the internet while Nexus is open. You can change this anytime in Settings.";
+    public const string ConsentBody = "SC-navLink can show live market prices from UEX and SC Trade Tools, two community-run price databases. This uses the internet while SC-navLink is open. You can change this anytime in Settings.";
     public const string ConsentEnable = "Turn on";
     public const string ConsentDecline = "Not now";
     public const string SettingsTitle = "MARKET DATA";
     public const string SettingsToggleTitle = "Show live market prices";
-    public const string SettingsToggleDesc = "Prices, stock and demand from UEX and SC Trade Tools community reports. One switch covers both. Refreshed about once an hour while Nexus is open.";
+    public const string SettingsToggleDesc = "Prices, stock and demand from UEX and SC Trade Tools community reports. One switch covers both. Refreshed about once an hour while SC-navLink is open.";
     public const string RefreshNow = "Refresh now";
     public const string SourceNote = "Data: UEX and SC Trade Tools community reports";
     // Shown in the Settings status area, under the last-refresh line: the cadence is a promise
     // about network activity, so it belongs where a reader checking on the feature is already
     // looking and not only in the toggle description (ruling 2026-07-27).
-    public const string CadenceNote = "Checks about once an hour while Nexus is open.";
+    public const string CadenceNote = "Checks about once an hour while SC-navLink is open.";
     public const string DossierFooter = "Prices: UEX community data";
     public const string NeverFetched = "No price data yet. Turn on live market prices and refresh.";
 

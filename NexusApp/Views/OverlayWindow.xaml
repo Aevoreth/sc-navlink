@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:conv="clr-namespace:NexusApp.Converters"
         xmlns:views="clr-namespace:NexusApp.Views"
-        Title="Nexus Overlay"
+        Title="SC-navLink Overlay"
         WindowStyle="None" AllowsTransparency="True"
         Background="Transparent"
         FontFamily="{StaticResource UiFont}"
@@ -67,8 +67,8 @@
                             HorizontalAlignment="Stretch" Background="Transparent"
                             MouseLeftButtonDown="Header_MouseLeftButtonDown" Cursor="SizeAll">
                     <!-- Animated Nexus mark (beam + sparks), replacing the old spinning arc. -->
-                    <views:NexusBeamIcon Width="18" Height="18" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <TextBlock Text="NEXUS" Foreground="{DynamicResource AccentBrush}"
+                    <views:NavLinkMark Width="18" Height="18" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock Text="NAVLINK" Foreground="{DynamicResource AccentBrush}"
                                FontFamily="{StaticResource DisplayFont}" FontWeight="Bold"
                                FontSize="16" VerticalAlignment="Center"/>
                     <TextBlock Text="OVERLAY" Foreground="{DynamicResource FgDimBrush}"

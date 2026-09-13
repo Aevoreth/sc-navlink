@@ -1,17 +1,17 @@
 ========================================
-  NEXUS - Star Citizen Mining Assistant
+  SC-navLink - Star Citizen companion
 ========================================
 
 DISCLAIMER
 ----------
 
-  NexusApp is an unofficial fan-made tool. NexusApp is NOT affiliated
+  SC-navLink is an unofficial fan-made tool. SC-navLink is NOT affiliated
   with Cloud Imperium Games (CIG) or Roberts Space Industries (RSI).
-  CIG and RSI do NOT endorse or sponsor NexusApp. Star Citizen®,
+  CIG and RSI do NOT endorse or sponsor SC-navLink. Star Citizen®,
   Roberts Space Industries® and Cloud Imperium® are registered
   trademarks of Cloud Imperium Rights LLC.
 
-  NexusApp reads pixel data from your screen. NexusApp shows reference
+  SC-navLink reads pixel data from your screen. SC-navLink shows reference
   information from a local database.
 
   Session Tracking, the hauling tracker, and the shard tracker are
@@ -23,12 +23,12 @@ DISCLAIMER
     - to track your server and shard
     - to fill in your RSI handle for a shared-library export
 
-  NexusApp does NOT do these things:
+  SC-navLink does NOT do these things:
     - read game memory
     - inject code
     - change game files
 
-  NexusApp is EAC-Safe (Easy Anti-Cheat compatible). NexusApp runs
+  SC-navLink is EAC-Safe (Easy Anti-Cheat compatible). SC-navLink runs
   entirely outside the game process.
 
 
@@ -38,23 +38,23 @@ GETTING STARTED
 1. Right-click the ZIP file.
 2. Select "Extract All...".
 3. Choose a location. The Desktop or the Documents folder works well.
-4. Open the extracted folder. Then open the NexusApp folder.
-5. Double-click "NexusApp.exe" to start NexusApp.
+4. Open the extracted folder. Then open the sc-navlink folder.
+5. Double-click "SC-navLink.exe" to start SC-navLink.
 
-NexusApp needs no installation. NexusApp does not need the internet to
+SC-navLink needs no installation. SC-navLink does not need the internet to
 run. Two features use the internet. Both features are optional: update
 checks and live market prices. Both stay off until you turn them on.
-NexusApp stores your settings and work orders on your PC. See the
+SC-navLink stores your settings and work orders on your PC. See the
 UPDATES section and the LIVE MARKET PRICES section below.
 
 
 WINDOWS SMARTSCREEN WARNING
 ----------------------------
 
-  When you first start NexusApp, Microsoft SmartScreen can show a blue
+  When you first start SC-navLink, Microsoft SmartScreen can show a blue
   "Windows protected your PC" dialog. This dialog appears because
-  NexusApp is unsigned. Code-signing certificates cost several hundred
-  dollars each year. NexusApp is safe. Use one of these two options:
+  SC-navLink is unsigned. Code-signing certificates cost several hundred
+  dollars each year. SC-navLink is safe. Use one of these two options:
 
   Option A - Run anyway:
     1. Click "More info" in the SmartScreen dialog.
@@ -66,69 +66,69 @@ WINDOWS SMARTSCREEN WARNING
     3. In the General tab, check "Unblock" at the bottom.
     4. Click OK.
     5. Extract the ZIP file.
-    6. Start NexusApp as usual.
+    6. Start SC-navLink as usual.
 
   If Windows Defender flags the file as a threat, the result is a
   false positive. You can submit the file for analysis at
   security.microsoft.com. You can also add an exclusion for the
-  NexusApp folder in Windows Security > Virus & threat protection >
+  SC-navLink folder in Windows Security > Virus & threat protection >
   Exclusions.
 
 
 UPDATES
 -------
 
-  Update checks are off until you turn them on. NexusApp asks you once
+  Update checks are off until you turn them on. SC-navLink asks you once
   when it starts. You can change your choice at any time in
   Settings > Updates.
 
-  When a new version is available, NexusApp shows a notice on the
+  When a new version is available, SC-navLink shows a notice on the
   OPERATIONS page. Each step asks before it acts:
 
-  1. Click "Download". NexusApp downloads the new version and verifies
+  1. Click "Download". SC-navLink downloads the new version and verifies
      it against a signed manifest.
-  2. Click "Install update". NexusApp verifies the files again,
+  2. Click "Install update". SC-navLink verifies the files again,
      replaces its own files, and restarts as the new version.
 
   Your settings, work orders, and blueprints are kept.
 
-  Some locations do not let NexusApp replace its own files (for
-  example, a protected folder or a network drive). NexusApp then
+  Some locations do not let SC-navLink replace its own files (for
+  example, a protected folder or a network drive). SC-navLink then
   unpacks the update and opens the new folder and your current folder.
   You copy the new files over the old ones.
 
-  If an update stops before it completes, NexusApp puts the previous
+  If an update stops before it completes, SC-navLink puts the previous
   version back the next time it starts.
 
 
 LIVE MARKET PRICES
 ------------------
 
-  Live market prices are off until you turn them on. NexusApp asks you
+  Live market prices are off until you turn them on. SC-navLink asks you
   one time, when you first open a page that shows prices (RS Signal
   Decoder, Mining Codex, or Refinery Tracker). You can also turn this
   on or off in SETTINGS.
 
-  When you turn this on, NexusApp gets sell prices from UEX. UEX is a
-  community-run price database. NexusApp refreshes the prices about
-  one time each hour while it is open. NexusApp sends only its app
-  name and version with each request. NexusApp sends no account, no
+  When you turn this on, SC-navLink gets sell prices from UEX. UEX is a
+  community-run price database. SC-navLink refreshes the prices about
+  one time each hour while it is open. SC-navLink sends only its app
+  name and version with each request. SC-navLink sends no account, no
   key, and nothing about you.
 
-  NexusApp shows these prices on the RS SIGNAL DECODER, the MINING
+  SC-navLink shows these prices on the RS SIGNAL DECODER, the MINING
   CODEX, the REFINERY TRACKER, and the overlay scan results. The
   MINING CODEX list also has an optional sell-price column.
 
-  NexusApp saves the prices on your PC. NexusApp works fully offline
+  SC-navLink saves the prices on your PC. SC-navLink works fully offline
   from these saved prices between fetches. UEX prices come from the
-  community. Prices can be old. NexusApp shows the age of each price
+  community. Prices can be old. SC-navLink shows the age of each price
   next to it.
 
 
 FIRST TIME SETUP
 ----------------
 
-When NexusApp opens, it shows the OPERATIONS page first.
+When SC-navLink opens, it shows the OPERATIONS page first.
 To use the auto-scan overlay, do these steps:
 
   1. Click the overlay button (⧉) at the top-right of the main window.
@@ -152,7 +152,7 @@ PAGES
                        the scroll wheel, and drag to pan.
 
   RS SIGNAL DECODER  - Enter an RS value by hand, or use auto-scan.
-                       NexusApp then shows the resource and the node
+                       SC-navLink then shows the resource and the node
                        count. Each result card shows a composition
                        section (CAN CONTAIN) and the best refinery
                        with its yield bonus.
@@ -184,10 +184,10 @@ PAGES
                        composition, byproduct sourcing, locations,
                        and blueprints.
 
-  REFINERY TRACKER   - Track your active refinery jobs. NexusApp shows
+  REFINERY TRACKER   - Track your active refinery jobs. SC-navLink shows
                        live countdown timers and status indicators.
 
-  CARGO HAULING      - Track your hauling contracts. NexusApp reads
+  CARGO HAULING      - Track your hauling contracts. SC-navLink reads
                        them from your Game.log. A consolidation view
                        shows what to load and what to drop at each stop
                        across your active hauls.
@@ -208,19 +208,19 @@ TIPS
   - The overlay click-through is on by default. In FPS and flight, the
     overlay passes the mouse through to the game while the game hides
     the cursor. You can turn this off in Settings.
-  - NexusApp marks resources in your shopping list with a teal glow.
+  - SC-navLink marks resources in your shopping list with a cyan glow.
     This glow appears in scan results and in recent scan history.
   - Shopping list: add resources or blueprint ingredients with the
     cart button. You can review them at any time from the main
     toolbar.
-  - Work order timers keep running after you restart NexusApp.
+  - Work order timers keep running after you restart SC-navLink.
 
 
 SUPPORT
 -------
 
   To report a bug or to send feedback, open an issue on GitHub:
-    https://github.com/T3SoD/NexusApp/issues
+    https://github.com/Aevoreth/sc-navlink/issues
   You can also reach T3SoD on Discord.
 
 ========================================

@@ -11,24 +11,24 @@ public class AppPathsTests
 {
     [Fact]
     public void NormalLaunch_UsesLiveRoot()
-        => Assert.Equal(Path.Combine(@"C:\ad", "NexusApp"),
+        => Assert.Equal(Path.Combine(@"C:\ad", "sc-navlink"),
             AppPaths.ResolveRoot(new[] { "app.exe" }, @"C:\ad"));
 
     [Fact]
     public void DemoArg_UsesDemoRoot()
-        => Assert.Equal(Path.Combine(@"C:\ad", "NexusApp_demo"),
+        => Assert.Equal(Path.Combine(@"C:\ad", "sc-navlink_demo"),
             AppPaths.ResolveRoot(new[] { "app.exe", AppPaths.DemoArg }, @"C:\ad"));
 
     [Fact]
     public void DemoArg_MustMatchExactly()
-        => Assert.Equal(Path.Combine(@"C:\ad", "NexusApp"),
+        => Assert.Equal(Path.Combine(@"C:\ad", "sc-navlink"),
             AppPaths.ResolveRoot(new[] { "app.exe", "--demo-profile-x" }, @"C:\ad"));
 
     [Fact]
     public void DemoRoot_IsTheDemoFolder()
-        => Assert.EndsWith("NexusApp_demo", AppPaths.DemoRoot);
+        => Assert.EndsWith("sc-navlink_demo", AppPaths.DemoRoot);
 
     [Fact]
     public void RootAndFlag_AgreeForThisProcess()
-        => Assert.Equal(AppPaths.IsDemoProfile, AppPaths.Root.EndsWith("NexusApp_demo"));
+        => Assert.Equal(AppPaths.IsDemoProfile, AppPaths.Root.EndsWith("sc-navlink_demo"));
 }

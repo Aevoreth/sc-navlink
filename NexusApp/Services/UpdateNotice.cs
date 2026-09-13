@@ -9,7 +9,7 @@ public static class UpdateNotice
 {
     public const string ConsentEyebrow = "UPDATE CHECKS";
     public const string ConsentBody =
-        "Nexus can check for new versions each time it starts. It contacts " +
+        "SC-navLink can check for new versions each time it starts. It contacts " +
         "GitHub only and sends nothing about you. You can change this anytime in " +
         "Settings > Updates.";
     public const string ConsentEnable = "Enable";
@@ -36,10 +36,10 @@ public static class UpdateNotice
         "Try again later. If this keeps happening, download the update from the releases page instead.";
 
     public const string InstallConfirmBody =
-        "Nexus will close and the installer will open. Your settings, work orders, and blueprints are kept.";
+        "SC-navLink will close and the installer will open. Your settings, work orders, and blueprints are kept.";
 
     public const string InstallConfirmBodyPortable =
-        "Nexus will close for a moment and reopen as the new version. Your settings, work orders, and blueprints are kept.";
+        "SC-navLink will close for a moment and reopen as the new version. Your settings, work orders, and blueprints are kept.";
 
     // Post-confirm staging failure: the app is still open, nothing was touched, and both
     // recovery paths are named (house pattern: what happened, what the app did, what to do).
@@ -51,47 +51,47 @@ public static class UpdateNotice
     // restore. Retrying in this session would be a lie, so this copy asks for the restart the
     // recovery needs and no Try again button is offered beside it.
     public const string RestorePendingBody =
-        "The update could not finish. Nexus will finish restoring the previous version the next time it starts. Close Nexus and start it again.";
+        "The update could not finish. SC-navLink will finish restoring the previous version the next time it starts. Close SC-navLink and start it again.";
 
-    public static string InstallConfirmTitle(Version v) => $"Install Nexus {v.ToString(3)} now?";
+    public static string InstallConfirmTitle(Version v) => $"Install SC-navLink {v.ToString(3)} now?";
 
     public static string UpdateBody(string current, Version available) =>
-        $"Nexus {available.ToString(3)} is available. You are on {current}.";
+        $"SC-navLink {available.ToString(3)} is available. You are on {current}.";
 
     public static string DownloadingBody(Version v, long doneBytes, long totalBytes) =>
-        $"Downloading Nexus {v.ToString(3)}. {doneBytes / 1048576} of {totalBytes / 1048576} MB.";
+        $"Downloading SC-navLink {v.ToString(3)}. {doneBytes / 1048576} of {totalBytes / 1048576} MB.";
 
-    public static string VerifyingBody(Version v) => $"Verifying the Nexus {v.ToString(3)} download.";
+    public static string VerifyingBody(Version v) => $"Verifying the SC-navLink {v.ToString(3)} download.";
 
     public static string ReadyBodyInstaller(Version v) =>
-        $"Nexus {v.ToString(3)} is downloaded and verified.";
+        $"SC-navLink {v.ToString(3)} is downloaded and verified.";
 
     // Installer parity: same sentence as ReadyBodyInstaller. Kept as its own method so call
     // sites and tests stay explicit about which flavor they are rendering.
     public static string ReadyBodyPortable(Version v) => ReadyBodyInstaller(v);
 
     public static string PreparingBody(Version v) =>
-        $"Preparing Nexus {v.ToString(3)}. Nexus will close and reopen in a moment.";
+        $"Preparing SC-navLink {v.ToString(3)}. SC-navLink will close and reopen in a moment.";
 
     // The guided manual flow is a different, intentional flow, never an error: the app
     // extracts and opens the folders, the user does one copy.
     public static string ReadyBodyPortableManual(Version v) =>
-        $"Nexus {v.ToString(3)} is downloaded and verified. Nexus cannot replace its own files from " +
+        $"SC-navLink {v.ToString(3)} is downloaded and verified. SC-navLink cannot replace its own files from " +
         "this location, so this update finishes with one quick copy.";
 
-    public static string UnpackingBody(Version v) => $"Unpacking Nexus {v.ToString(3)}.";
+    public static string UnpackingBody(Version v) => $"Unpacking SC-navLink {v.ToString(3)}.";
 
     public static string ManualHandoffBody(Version v) =>
-        $"Two folders are open: the new Nexus {v.ToString(3)} and your current Nexus. Close Nexus, " +
+        $"Two folders are open: the new SC-navLink {v.ToString(3)} and your current SC-navLink. Close SC-navLink, " +
         "then copy everything from the new folder into the current one, replacing files when asked.";
 
     // Sentence order is the house pattern: what happened, what the app did, where you stand.
     public static string SwapFailedBody(string attempted, string current) =>
-        $"The update to Nexus {attempted} could not finish. Nexus restored the previous version " +
-        $"and nothing changed. You are still on Nexus {current}.";
+        $"The update to SC-navLink {attempted} could not finish. SC-navLink restored the previous version " +
+        $"and nothing changed. You are still on SC-navLink {current}.";
 
     public static string PostUpdateBody(string version) =>
-        $"Nexus updated to v{version}. See what changed in About > Changelog.";
+        $"SC-navLink updated to v{version}. See what changed in About > Changelog.";
 
     public static string FormatLastChecked(DateTime? lastUtc) =>
         lastUtc is null ? NeverChecked : "Last checked " + RelaunchNotice.FormatTimestamp(lastUtc);
@@ -125,7 +125,7 @@ public static class UpdateNotice
             case "ManualHandoff":
                 return availableVersion is null
                     ? FormatLastChecked(lastCheckedUtc)
-                    : string.Create(CultureInfo.InvariantCulture, $"Nexus {availableVersion.ToString(3)} is available");
+                    : string.Create(CultureInfo.InvariantCulture, $"SC-navLink {availableVersion.ToString(3)} is available");
             default:
                 return FormatLastChecked(lastCheckedUtc);
         }

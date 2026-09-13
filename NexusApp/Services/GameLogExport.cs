@@ -143,7 +143,7 @@ public static class GameLogExport
 
         var sb = new StringBuilder();
         sb.AppendLine("=== Star Citizen Game.log export ===");
-        sb.AppendLine($"Exported: {nowUtc:yyyy-MM-dd HH:mm:ss} UTC by Nexus {appVersion}");
+        sb.AppendLine($"Exported: {nowUtc:yyyy-MM-dd HH:mm:ss} UTC by SC-navLink {appVersion}");
         sb.AppendLine($"Range: {Describe(fromUtc)} to {Describe(toUtc)} (UTC, the timezone Game.log itself writes)");
         sb.AppendLine(scrub
             ? "Personal details: REMOVED (handle, account and player ids, IP addresses, Windows user folder)"

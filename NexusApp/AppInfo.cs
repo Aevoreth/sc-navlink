@@ -21,20 +21,24 @@ public static class AppInfo
     }
 
     /// <summary>"Installer" (Setup.exe) or "Portable" - the same exe ships both ways, so this is
-    /// detected from an installer-dropped marker, falling back to whether the app runs from the
-    /// installer's %LocalAppData%\Nexus location. "Unknown" if detection fails.</summary>
+    /// detected from an installer-dropped marker, falling back to whether the app runs from a
+    /// known installer folder. "Unknown" if detection fails.</summary>
     public static string Distribution
     {
         get
         {
             try
             {
-                var dir = AppContext.BaseDirectory;
+                var dir = AppContext.BaseDirectory.TrimEnd('\\');
                 if (File.Exists(Path.Combine(dir, "install.marker"))) return "Installer";
-                var installDir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Nexus");
-                return string.Equals(dir.TrimEnd('\\'), installDir, StringComparison.OrdinalIgnoreCase)
-                    ? "Installer" : "Portable";
+                var local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                foreach (var folder in new[] { AppIdentity.InstallFolderName, AppIdentity.LegacyInstallFolderName })
+                {
+                    var installDir = Path.Combine(local, folder).TrimEnd('\\');
+                    if (string.Equals(dir, installDir, StringComparison.OrdinalIgnoreCase))
+                        return "Installer";
+                }
+                return "Portable";
             }
             catch { return "Unknown"; }
         }

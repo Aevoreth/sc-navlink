@@ -111,13 +111,13 @@ public sealed class TrayIcon : IDisposable
         {
             lpfnWndProc = _proc,
             hInstance = hInstance,
-            lpszClassName = "NexusTrayHost_" + Guid.NewGuid().ToString("N"),
+            lpszClassName = "NavLinkTrayHost_" + Guid.NewGuid().ToString("N"),
             lpszMenuName = "",
         };
         RegisterClass(ref cls);
         // HWND_MESSAGE (-3): a message-only window. No pixels, no taskbar presence, and it survives
         // the main window being hidden, which is exactly what the tray option needs.
-        _hwnd = CreateWindowEx(0, cls.lpszClassName, "Nexus tray", 0, 0, 0, 0, 0,
+        _hwnd = CreateWindowEx(0, cls.lpszClassName, "SC-navLink tray", 0, 0, 0, 0, 0,
             new IntPtr(-3), IntPtr.Zero, hInstance, IntPtr.Zero);
 
         _icon = LoadAppIcon();
@@ -194,9 +194,9 @@ public sealed class TrayIcon : IDisposable
         if (menu == IntPtr.Zero) return;
         try
         {
-            AppendMenu(menu, MF_STRING, IdOpen, "Open Nexus");
+            AppendMenu(menu, MF_STRING, IdOpen, "Open SC-navLink");
             AppendMenu(menu, MF_SEPARATOR, 0, null);
-            AppendMenu(menu, MF_STRING, IdExit, "Exit Nexus");
+            AppendMenu(menu, MF_STRING, IdExit, "Exit SC-navLink");
             GetCursorPos(out var pt);
             // Documented requirement: without this the menu does not dismiss when the user clicks
             // away from it, because the owning window is not in the foreground.
@@ -208,7 +208,7 @@ public sealed class TrayIcon : IDisposable
         finally { DestroyMenu(menu); }
     }
 
-    // The app's own icon, taken from the running exe so it always matches the shipped Assets\nexus.ico
+    // The app's own icon, taken from the running exe so it always matches the shipped Assets\sc-navlink.ico
     // without embedding a second copy. IntPtr.Zero (extraction failed) is survivable: Windows draws a
     // blank slot rather than refusing the icon, and the menu still works.
     private static IntPtr LoadAppIcon()

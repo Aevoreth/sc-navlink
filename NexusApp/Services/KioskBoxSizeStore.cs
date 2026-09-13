@@ -31,9 +31,7 @@ public sealed class KioskBoxSizeStore
 
     public KioskBoxSizeStore(string? path = null)
     {
-        _path = path ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "NexusApp", "kiosk_box_sizes.json");
+        _path = path ?? Path.Combine(AppPaths.Root, "kiosk_box_sizes.json");
         Load();
     }
 

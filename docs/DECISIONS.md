@@ -27,7 +27,7 @@ Use **NavLink** or **navLink** as internal shorthand when the context is clear.
 
 The rebrand can occur in controlled steps. Inherited Nexus names can remain until a safe migration exists.
 
-Issue #6 tracks the planned product rebrand.
+Issue #6 is the first rebrand pass.
 
 ## D-002: Derive the project from Nexus
 
@@ -194,7 +194,7 @@ A failed refresh must keep last-known-good rows.
 
 Issue #5 can show data age from `ObservedUtc` and `FetchedUtc`.
 
-The SQLite file is `%AppData%\NexusApp\cache\provider_cache.db`.
+The SQLite file is `%AppData%\sc-navlink\cache\provider_cache.db`.
 
 ## D-008: Build NEXT as deterministic logic before AI
 
@@ -240,9 +240,7 @@ Preserve compatible local-data migration when names or paths change.
 
 ### Consequences
 
-Issue #6 tracks the first rebrand pass.
-
-Inherited technical names can remain during the transition.
+Issue #6 is the first rebrand pass. Inherited technical names can remain during the transition.
 
 ## D-010: Define a documentation authority model
 
