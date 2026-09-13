@@ -19,14 +19,23 @@ public sealed partial class TradePage
     private CommodityPickerBox _pricesCommodityPicker = null!;   // shared type-or-browse field (issue #41), replaces the plain ComboBox
     private readonly bool[] _priceCols = { true, true, true, false };   // STOCK, STATUS, AGE, +WEEK AVG - session only, not persisted (task brief: "persist nothing new")
     private static readonly string[] PriceColLabels = { "STOCK", "STATUS", "AGE", "+WEEK AVG" };
+    private static readonly (MarketCatalogSide Side, string Label)[] PriceSides =
+    {
+        (MarketCatalogSide.Both, "BOTH"),
+        (MarketCatalogSide.Buy, "BUY"),
+        (MarketCatalogSide.Sell, "SELL"),
+    };
     private string? _pricesSelectedCommodity;
+    private bool _pricesSeeded;
+    private string _pricesLocation = "";
+    private MarketCatalogSide _pricesSide = MarketCatalogSide.Both;
 
     // MAP tab terminal filter (Task 8): set only by ShowPricesForTerminal, session-only (same
     // reasoning as _priceCols/_pricesSortColumn above - not part of AppSettings' fixed contract
     // and not something a "last state" restore should reapply on its own). Coexists with a chosen
-    // commodity (both filters AND together); when no commodity is chosen while this is set, the
-    // results show every commodity traded at that one terminal instead of the usual "one commodity,
-    // every terminal" view - see RefreshPricesCommodityBox and RebuildPrices below.
+    // commodity (both filters AND together); when no commodity is chosen while this or a location
+    // filter is set, the results show every matching catalog row instead of the usual "one
+    // commodity, every terminal" view - see RefreshPricesCommodityBox and RebuildPrices below.
     private int? _pricesTerminalFilter;
 
     // Sort state (live-pass item 2, 2026-07-30): session-only, not persisted - same
@@ -42,6 +51,10 @@ public sealed partial class TradePage
     private StackPanel _pricesInputs = null!;
     private StackPanel _pricesResults = null!;
     private List<string>? _pricesCommodityNames;   // the list currently pushed into the picker
+    private FrameworkElement _pricesChromeRow = null!;
+    private Button _pricesRefreshBtn = null!;
+    private TextBox _pricesLocationBox = null!;
+    private TextBlock _pricesBanner = null!;
 
     // FILTER CHIP BAR (concept A, approved 2026-08-10). Replaced the collapsible FILTERS shelf:
     // one chip per setting, each opening a popover holding that setting's own control.
@@ -67,30 +80,60 @@ public sealed partial class TradePage
         // path that changes the selection: typing just filters the popup, so clearing the text
         // never silently drops the active commodity, and the terminal-browse null state (Task 8)
         // survives because nothing here forces a pick.
-        _pricesCommodityPicker = new CommodityPickerBox();
+        _pricesCommodityPicker = new CommodityPickerBox { PinnedFirst = "ALL" };
         _pricesCommodityPicker.Opened += () => Logger.Info("[UI] Trade prices: commodity list opened");
         _pricesCommodityPicker.Committed += name =>
         {
-            // Same-row re-click is a no-op (the old ComboBox never re-fired SelectionChanged for
-            // the already-selected item, and the planner's SetCommodityFilter guards the same way):
-            // no duplicate log, no rebuild, no lost scroll position.
-            if (string.Equals(name, _pricesSelectedCommodity, StringComparison.Ordinal)) return;
-            _pricesSelectedCommodity = name;
-            Logger.Info($"[UI] Trade prices: commodity {name}");
+            var next = string.Equals(name, "ALL", StringComparison.OrdinalIgnoreCase) ? null : name;
+            if (string.Equals(next, _pricesSelectedCommodity, StringComparison.Ordinal)) return;
+            _pricesSelectedCommodity = next;
+            Logger.Info($"[UI] Trade prices: commodity {next ?? "ALL"}");
             RebuildPrices();
         };
-        // Abandoned-query cleanup: once the user walks away without committing (popup dismissed or
-        // focus gone), the box reverts to naming the commodity the rows actually render. Without
-        // this, IsKeyboardFocused can pin the deferred write-back off for a whole pane visit,
-        // because nothing else on this pane takes keyboard focus.
         _pricesCommodityPicker.InteractionEnded += () =>
         {
-            var expect = _pricesSelectedCommodity ?? "";
+            var expect = _pricesSelectedCommodity ?? "ALL";
             if (!string.Equals(_pricesCommodityPicker.Text, expect, StringComparison.Ordinal))
                 _pricesCommodityPicker.Text = expect;
         };
         pickerGrp.Children.Add(_pricesCommodityPicker);
         _pricesInputs.Children.Add(pickerGrp);
+
+        var locationGrp = new StackPanel();
+        locationGrp.Children.Add(FieldLabel("Location"));
+        _pricesLocationBox = new TextBox
+        {
+            Style = (Style)Application.Current.FindResource("NexusTextBox"),
+            Tag = "Terminal or place",
+        };
+        _pricesLocationBox.TextChanged += (_, _) =>
+        {
+            var next = _pricesLocationBox.Text?.Trim() ?? "";
+            if (string.Equals(next, _pricesLocation, StringComparison.Ordinal)) return;
+            _pricesLocation = next;
+            Logger.Info($"[UI] Trade prices: location {(_pricesLocation.Length == 0 ? "ANY" : _pricesLocation)}");
+            RebuildPrices();
+        };
+        locationGrp.Children.Add(_pricesLocationBox);
+
+        var sideGrp = new StackPanel();
+        sideGrp.Children.Add(FieldLabel("Side"));
+        var sideRow = new StackPanel { Orientation = Orientation.Horizontal };
+        foreach (var (side, label) in PriceSides)
+        {
+            var pill = ScopePill(label);
+            pill.MouseLeftButtonUp += (_, _) =>
+            {
+                if (_pricesSide == side) return;
+                _pricesSide = side;
+                Logger.Info($"[UI] Trade prices: side {label}");
+                RefreshPricesSidePills(sideRow);
+                RebuildPrices();
+            };
+            sideRow.Children.Add(pill);
+        }
+        RefreshPricesSidePills(sideRow);
+        sideGrp.Children.Add(sideRow);
 
         var toggles = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 12) };
         for (int i = 0; i < PriceColLabels.Length; i++)
@@ -108,10 +151,10 @@ public sealed partial class TradePage
         }
         _pricesResults = new StackPanel();
 
-        // FILTER CHIP BAR (concept A, approved 2026-08-10). Market has the fewest settings of the
-        // three flows: one commodity, plus the column toggles. The toggles stay OUT of a popover and
-        // ride beside the chip, because they are view options with no single value a chip could
-        // name, and because hiding four one-click toggles behind a fifth click makes them worse.
+        // FILTER CHIP BAR (concept A, approved 2026-08-10). Commodity, location, and buy/sell side
+        // live in chips. System stays on the shared Trade context row (ALL/STANTON/PYRO/NYX).
+        // Column toggles stay OUT of a popover and ride beside the chips, because they are view
+        // options with no single value a chip could name.
         DetachFromParent(pickerGrp);
         DetachFromParent(toggles);
         pickerGrp.Margin = new Thickness(0);
@@ -124,16 +167,51 @@ public sealed partial class TradePage
             new() { Key = "COMMODITY", Content = pickerGrp, PopoverWidth = 250,
                     Value = () => string.IsNullOrWhiteSpace(_pricesSelectedCommodity) ? "ALL" : _pricesSelectedCommodity!,
                     IsSet = () => !string.IsNullOrWhiteSpace(_pricesSelectedCommodity) },
+            new() { Key = "LOCATION", Content = locationGrp, PopoverWidth = 250,
+                    Value = () => string.IsNullOrWhiteSpace(_pricesLocation) ? "ANY" : _pricesLocation,
+                    IsSet = () => !string.IsNullOrWhiteSpace(_pricesLocation) },
+            new() { Key = "SIDE", Content = sideGrp, PopoverWidth = 220,
+                    Value = () => _pricesSide.ToString().ToUpperInvariant(),
+                    IsSet = () => _pricesSide != MarketCatalogSide.Both },
         }, "prices");
+
+        _pricesRefreshBtn = new Button
+        {
+            Content = MarketCatalogNotice.Refresh,
+            Style = (Style)Application.Current.FindResource("NexusButton"),
+            Padding = new Thickness(16, 6, 16, 6),
+            Margin = new Thickness(8, 0, 0, 6),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _pricesRefreshBtn.Click += (_, _) =>
+        {
+            if (App.Market.FetchInProgress) return;
+            _pricesRefreshBtn.IsEnabled = false;
+            Logger.Info("[UI] Trade prices: refresh");
+            _ = App.Market.RefreshAsync(manual: true);
+        };
 
         var chipRow = new StackPanel { Orientation = Orientation.Horizontal };
         chipRow.Children.Add(_pricesChips);
         chipRow.Children.Add(toggles);
+        chipRow.Children.Add(_pricesRefreshBtn);
+
+        _pricesBanner = new TextBlock
+        {
+            FontFamily = Hud.Font("UiFont"), FontSize = 12.5, Foreground = Hud.Br("AccentBrush"),
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 10),
+            Visibility = Visibility.Collapsed,
+        };
+
+        var chrome = new StackPanel();
+        chrome.Children.Add(chipRow);
+        chrome.Children.Add(_pricesBanner);
+        _pricesChromeRow = chrome;
 
         PricesHost.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         PricesHost.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        Grid.SetRow(chipRow, 0);
-        PricesHost.Children.Add(chipRow);
+        Grid.SetRow(_pricesChromeRow, 0);
+        PricesHost.Children.Add(_pricesChromeRow);
         var resultsScroll = new ScrollViewer
         {
             Content = _pricesResults,
@@ -152,17 +230,24 @@ public sealed partial class TradePage
     // writes (never a user pick, never a popup reopen), and the push is skipped entirely when
     // nothing changed.
     //
-    // Task 8 addition: while the MAP tab's terminal filter is active, an invalid/null selection
-    // falls back to null (no forced pick) instead of the first commodity - that null is the
-    // deliberate "every commodity at this terminal" state ShowPricesForTerminal puts the page into,
-    // and forcing a default here would silently narrow it back down to one commodity on the very
-    // next refresh. Outside terminal-filter mode this is unchanged from before.
+    // Task 8 / catalog fold: a location or terminal constraint may keep commodity at ALL (null).
+    // First visit still seeds the first catalog commodity. After that, ALL stays ALL unless a
+    // previously chosen name disappeared, in which case the first remaining name is picked.
     private void RefreshPricesCommodityBox(List<string> commodities)
     {
         bool stillValid = _pricesSelectedCommodity is not null
             && commodities.Any(c => string.Equals(c, _pricesSelectedCommodity, StringComparison.OrdinalIgnoreCase));
         if (!stillValid)
-            _pricesSelectedCommodity = _pricesTerminalFilter is null ? commodities.FirstOrDefault() : null;
+        {
+            bool otherConstraint = _pricesTerminalFilter is not null || !string.IsNullOrWhiteSpace(_pricesLocation);
+            if (otherConstraint)
+                _pricesSelectedCommodity = null;
+            else if (_pricesSelectedCommodity is not null || !_pricesSeeded)
+                _pricesSelectedCommodity = commodities.FirstOrDefault();
+            else
+                _pricesSelectedCommodity = null;
+        }
+        if (_pricesSelectedCommodity is not null) _pricesSeeded = true;
 
         // The backing list is pushed even mid-interaction: SetItems never touches an open popup's
         // rows or the box text (its own doc), and skipping it here would leave the next chevron
@@ -181,8 +266,9 @@ public sealed partial class TradePage
         // or on the next non-interacting rebuild.
         if (_pricesCommodityPicker.IsInteracting) return;
 
-        if (!string.Equals(_pricesCommodityPicker.Text, _pricesSelectedCommodity ?? "", StringComparison.Ordinal))
-            _pricesCommodityPicker.Text = _pricesSelectedCommodity ?? "";
+        var expect = _pricesSelectedCommodity ?? "ALL";
+        if (!string.Equals(_pricesCommodityPicker.Text, expect, StringComparison.Ordinal))
+            _pricesCommodityPicker.Text = expect;
     }
 
     // FILTERS shelf summary (task B2): "{commodity}, {visible column names}". Commodity falls back
@@ -194,44 +280,54 @@ public sealed partial class TradePage
     private void RebuildPrices()
     {
         BuildPricesChrome();
-        if (!EnsureMarketConsent(_pricesResults, _pricesChips)) return;
+        if (!EnsureMarketConsent(_pricesResults, _pricesChromeRow)) return;
         _pricesResults.Children.Clear();
+        _pricesRefreshBtn.IsEnabled = !App.Market.FetchInProgress;
+        RefreshPricesBanner();
 
-        var snap = App.Market.Snapshot;
-        var commodities = CommodityNames(snap);
+        var prices = App.Market.TradePrices;
+        var commodities = MarketCatalogQueries.CommodityNames(prices.Items).ToList();
 
         RefreshPricesCommodityBox(commodities);
         // FILTERS shelf summary (task B2): after the correction above, so a commodity the hourly
         // refresh dropped is named correctly rather than one rebuild late.
         RefreshPricesFilterSummary();
 
-        // Task 8: a null selection is only a real empty state when it is NOT the terminal-browse
-        // "every commodity at this one terminal" mode RefreshPricesCommodityBox above deliberately
-        // leaves null for (ShowPricesForTerminal's whole point) - that mode still has rows to show.
-        if (snap is null || commodities.Count == 0 || (_pricesSelectedCommodity is null && _pricesTerminalFilter is null))
+        if (prices.Items.Count == 0)
         {
-            _pricesResults.Children.Add(EmptyOrStaleNote(snap?.TradePrices.FetchedUtc));
+            _pricesResults.Children.Add(PricesEmptyNote(MarketCatalogNotice.NoCachedRows));
+            return;
+        }
+
+        var filter = new MarketCatalogFilter(
+            _pricesSelectedCommodity,
+            App.Settings.Current.TradeScope,
+            _pricesLocation,
+            _pricesSide,
+            _pricesTerminalFilter);
+        if (!filter.HasBrowseConstraint)
+        {
+            _pricesResults.Children.Add(PricesEmptyNote(MarketCatalogNotice.NeedFilter));
+            return;
+        }
+
+        var catalogRows = MarketCatalogQueries.Query(prices.Items, App.Market.Terminals.Items, filter);
+        var uexRows = catalogRows.Select(ToTradePrice).ToList();
+        if (uexRows.Count == 0)
+        {
+            _pricesResults.Children.Add(PricesEmptyNote(MarketCatalogNotice.NoMatchingRows));
             return;
         }
 
         // Terminal lookup, built once per rebuild: TerminalId -> MarketTerminal, so each row's
         // System tag is a dictionary read rather than a linear scan of Terminals.Rows.
-        var terminals = snap.Terminals.Rows.ToDictionary(t => t.Id);
-
-        // Task 8: the commodity filter is now optional (null = every commodity, the terminal-browse
-        // mode) and the terminal filter is a second, independently optional AND clause - a MAP tab
-        // pin can arrive with either, both, or (outside this feature) neither set.
-        var uexRows = snap.TradePrices.Rows
-            .Where(r => _pricesSelectedCommodity is null || string.Equals(r.CommodityName, _pricesSelectedCommodity, StringComparison.OrdinalIgnoreCase))
-            .Where(r => _pricesTerminalFilter is not { } tid || r.TerminalId == tid)
-            .ToList();
+        var terminals = CatalogTerminals();
 
         // SCT-only rows, merged into the same list (never a separate section). Only meaningful for
-        // a single selected commodity - SctOnlyBuyers takes one CommodityId, and the terminal-browse
-        // "every commodity here" mode has no one id to key it off, so that mode shows UEX rows only
-        // (never a fabricated per-commodity SCT match). App.Sct.SctOnlyBuyers self-gates on
-        // the market consent; the outer check here keeps this call site's own trace at zero while dark,
-        // same as the Sell flow.
+        // a single selected commodity - SctOnlyBuyers takes one CommodityId, and ALL-commodity
+        // browse has no one id to key it off, so that mode shows catalog rows only. App.Sct.SctOnlyBuyers
+        // self-gates on the market consent; the outer check here keeps this call site's own trace
+        // at zero while dark, same as the Sell flow.
         var sctOnly = App.Settings.Current.MarketDataEnabled == true && _pricesSelectedCommodity is not null && uexRows.Count > 0
             ? App.Sct.SctOnlyBuyers(uexRows[0].CommodityId).ToList()
             : new List<SctListing>();
@@ -290,17 +386,17 @@ public sealed partial class TradePage
         });
 
         string sctSuffix = App.Settings.Current.MarketDataEnabled == true ? $", sctOnly {sctOnly.Count}" : "";
-        string commodityPart = _pricesSelectedCommodity ?? "ALL (terminal browse)";
+        string commodityPart = _pricesSelectedCommodity ?? "ALL";
         Logger.Info($"[UI] Trade prices run: {totalTerminals} terminals, commodity {commodityPart}, showing {top.Count}{sctSuffix}");
     }
 
     /// <summary>Called when the user picks "show prices here" on a MAP tab terminal pin: switches
     /// to the Prices flow and filters results down to that one terminal. Coexists with whatever
-    /// commodity is already selected (both filters AND together, RebuildPrices' uexRows Where
-    /// chain) - this does not touch _pricesSelectedCommodity, so a prior single-commodity browse
-    /// narrows further to "this commodity, at this terminal" rather than resetting.
+    /// commodity is already selected (both filters AND together) - this does not touch
+    /// _pricesSelectedCommodity, so a prior single-commodity browse narrows further to "this
+    /// commodity, at this terminal" rather than resetting.
     ///
-    /// A terminal id that does not resolve (stale pin from a snapshot that has since changed)
+    /// A terminal id that does not resolve (stale pin from a catalog that has since changed)
     /// mirrors PrefillPlannerOriginFromMap's own no-op-on-null rule: the filter is never set at
     /// all, only skipped - still switches to Prices (the user's click should land somewhere), but
     /// leaves _pricesTerminalFilter untouched rather than setting it to an id nothing can resolve.
@@ -311,7 +407,7 @@ public sealed partial class TradePage
     /// filter for the rest of the session (review finding, task-8).</summary>
     internal void ShowPricesForTerminal(int terminalId)
     {
-        var terminals = App.Market.Snapshot?.Terminals.Rows ?? new List<MarketTerminal>();
+        var terminals = CatalogTerminals().Values.ToList();
         var name = TradeOriginResolver.OriginNameForTerminal(terminalId, terminals);
         SwitchTab(2);
         if (name is null)
@@ -460,7 +556,28 @@ public sealed partial class TradePage
             // (TradePage.Sell.cs, BuildBuyerRowCore's terminalName param, fed from SellLookup.Buyer.
             // Row.TerminalName) - left unchanged.
             var termPanel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-            termPanel.Children.Add(new TextBlock { Text = r.TerminalName, FontFamily = Hud.Font("UiFont"), FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = Hud.Br("FgBrush"), VerticalAlignment = VerticalAlignment.Center });
+            if (_pricesSelectedCommodity is null)
+            {
+                termPanel.Children.Add(new TextBlock
+                {
+                    Text = r.CommodityName, FontFamily = Hud.Font("UiFont"), FontSize = 13,
+                    FontWeight = FontWeights.SemiBold, Foreground = Hud.Br("FgBrush"),
+                    VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0),
+                });
+            }
+            var termName = new TextBlock
+            {
+                Text = r.TerminalName, FontFamily = Hud.Font("UiFont"), FontSize = 13,
+                FontWeight = FontWeights.SemiBold, Foreground = Hud.Br("CyanBrush"),
+                VerticalAlignment = VerticalAlignment.Center, Cursor = Cursors.Hand,
+                ToolTip = "Show on Starmap",
+            };
+            termName.MouseLeftButtonUp += (_, e) =>
+            {
+                e.Handled = true;
+                RaiseShowOnMapForTerminal(r.TerminalId, r.TerminalName);
+            };
+            termPanel.Children.Add(termName);
             string? system = terminals.TryGetValue(r.TerminalId, out var termInfo) ? termInfo.System : null;
             if (SystemTag(system) is { } tag) termPanel.Children.Add(tag);
             Grid.SetColumn(termPanel, col++); grid.Children.Add(termPanel);
@@ -542,5 +659,54 @@ public sealed partial class TradePage
     {
         Text = "-", FontFamily = Hud.Font("MonoFont"), FontSize = fontSize, Foreground = Hud.Br("FgDimBrush"),
         HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center,
+    };
+
+    private void RefreshPricesBanner()
+    {
+        var prices = App.Market.TradePrices;
+        var freshness = App.Market.FetchInProgress ? ProviderFreshness.Fresh : prices.Freshness;
+        var banner = MarketCatalogNotice.Banner(freshness);
+        _pricesBanner.Text = banner ?? "";
+        _pricesBanner.Visibility = banner is null ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void RefreshPricesSidePills(StackPanel row)
+    {
+        for (int i = 0; i < PriceSides.Length && i < row.Children.Count; i++)
+        {
+            bool on = _pricesSide == PriceSides[i].Side;
+            var pill = (Border)row.Children[i];
+            ((TextBlock)pill.Child).Foreground = on ? Hud.Br("AccentBrush") : Hud.Br("FgDimBrush");
+            pill.BorderBrush = on ? Hud.Br("AccentStrongBrush") : Hud.Br("NavBorderBrush");
+            pill.Background = on ? Hud.Br("AccentFaintBrush") : Hud.Br("Bg2NavBrush");
+        }
+    }
+
+    private static Dictionary<int, MarketTerminal> CatalogTerminals()
+    {
+        var map = new Dictionary<int, MarketTerminal>();
+        foreach (var t in App.Market.Terminals.Items)
+            map[t.Id] = UexNormalizer.ToMarket(t);
+        return map;
+    }
+
+    private static TradePriceRow ToTradePrice(MarketCatalogRow r) =>
+        new(r.TerminalId, r.CommodityId, r.Buy, r.Sell, r.BuyStockScu, r.SellDemandScu,
+            r.StatusBuy, r.StatusSell, "", r.ObservedUtc, r.TerminalName, r.CommodityName);
+
+    private void RaiseShowOnMapForTerminal(int terminalId, string terminalName)
+    {
+        var terminal = App.Market.Terminals.Items.FirstOrDefault(t => t.Id == terminalId);
+        if (terminal is null) return;
+        if (App.Map.ResolveTerminal(UexNormalizer.ToMarket(terminal)) is not { } stop) return;
+        Logger.Info($"[UI] Trade prices: show on map {terminalName}");
+        RaiseShowOnMap(stop.Id);
+    }
+
+    private static TextBlock PricesEmptyNote(string text) => new()
+    {
+        Text = text, FontFamily = Hud.Font("UiFont"), FontSize = 12.5,
+        Foreground = Hud.Br("FgDimBrush"), TextWrapping = TextWrapping.Wrap, MaxWidth = 520,
+        Margin = new Thickness(0, 8, 0, 0),
     };
 }

@@ -137,7 +137,7 @@ The current roadmap is maintained in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 Current sequence:
 
-1. **0.1 — Foundation:** project identity, build/test baseline, shared game state, provider boundaries, local UEX cache, native Market view.
+1. **0.1 — Foundation:** project identity, build/test baseline, shared game state, provider boundaries, local UEX cache, native Market catalog on Trade.
 2. **0.2 — Trade & Route Planner:** combine contracts, capacity, budget, market data, and existing routes.
 3. **0.3 — Terminal Vision:** capture/OCR/validation/local update/optional UEX submission.
 4. **0.4 — Mining Vision:** richer scan recognition and contextual value/resource guidance.

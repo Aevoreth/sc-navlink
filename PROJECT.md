@@ -22,7 +22,7 @@ The `foundation/0.1` branch is the integration branch for this phase.
 
 GitHub issues define current task status and acceptance criteria. This document defines product intent and long-lived project rules.
 
-The next architecture task is Issue #5, which adds the native Market view.
+The next architecture task is Issue #6, which starts the product rebrand.
 
 ## Product goals
 

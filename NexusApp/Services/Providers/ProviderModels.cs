@@ -2,7 +2,7 @@ namespace NexusApp.Services;
 
 /// <summary>
 /// Freshness of a cached provider slice. This is metadata for callers.
-/// Issue #5 shows it on the Market view. Cached rows do not expire out of SQLite.
+/// The Market tab shows it. Cached rows do not expire out of SQLite.
 /// </summary>
 public enum ProviderFreshness
 {
