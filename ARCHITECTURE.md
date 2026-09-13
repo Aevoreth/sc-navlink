@@ -61,7 +61,9 @@ floats over the game.
 **MainWindow** shows one dock page at a time. `GuidesPage` is the Mission
 Guides dock page: a category-grouped card grid over the shared `GuideCatalog`.
 Clicking a card hands the page over to `GuideViewer`, a zoom-and-pan image
-view shared with the overlay.
+view shared with the overlay. Trade's Market sub-tab is the native catalog
+browser. It reads `IMarketCatalog`. It does not call UEX HTTP. Planner and
+Sell load stay on `MarketSnapshot`.
 
 **OverlayWindow** shows the same tabs in a compact strip, `OverlayTabStrip`,
 where the active tab expands into an amber pill and the rest show only their
@@ -116,8 +118,8 @@ The view model controls these services. Each service holds little or no state.
   its HTTP transport) touches the network. The other three do no network work:
   signature and hash verification, manifest parsing, and the notice text.
 - **Market (IMarketCatalog / MarketDataService / UexMarketProvider /
-  ProviderCacheStore / MarketSnapshot / MarketNameMap / MarketQueries /
-  MarketNotice)** - the opt-in live market data subsystem.
+  ProviderCacheStore / MarketCatalogQueries / MarketSnapshot / MarketNameMap /
+  MarketQueries / MarketNotice)** - the opt-in live market data subsystem.
   `MarketDataService` runs the hourly fetch cycle. `UexMarketProvider` calls
   the UEX API 2.0 (https://uexcorp.space/api). It returns normalized catalog
   rows, not UEX DTOs. `ProviderCacheStore` keeps those rows in
@@ -125,10 +127,11 @@ The view model controls these services. Each service holds little or no state.
   row only when UEX `date_modified` is newer. An omitted id stays in SQLite.
   Cadence is a fetch throttle. Cached rows do not expire.
   `FetchedUtc` is the last UEX call. `ObservedUtc` is the community report age.
-  Issue #5 shows that age on the Market view. `IMarketCatalog` is the read API
-  for that view. Inherited Trade and Overlay read `MarketSnapshot`. That
-  snapshot is a projection of current listings. `GameState` is live operational
-  state. It is not this catalog. Concurrent refreshes share one in-flight cycle.
+  Trade's Market tab shows that age. `IMarketCatalog` is the read API for that
+  view. `MarketCatalogQueries` filters catalog rows for the tab. Inherited
+  Planner, Sell load, and Overlay read `MarketSnapshot`. That snapshot is a
+  projection of current listings. `GameState` is live operational state. It is not this
+  catalog. Concurrent refreshes share one in-flight cycle.
   A failed refresh must keep last-known-good rows. A leftover
   `uex_snapshot.json` is imported one time when the cache is empty.
   `MarketDataService` and `UpdateService` are the only two places in the app

@@ -2,7 +2,7 @@ namespace NexusApp.Services;
 
 /// <summary>
 /// Cadence is a fetch throttle. It does not delete cached rows.
-/// Freshness is metadata for callers (Issue #5 shows age on the Market view).
+/// Freshness is metadata for callers (the Market view shows age).
 /// </summary>
 internal static class ProviderFreshnessRules
 {

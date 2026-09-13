@@ -606,6 +606,7 @@ public partial class MainWindow : Window
             Logger.Info("[NET] market consent: declined");
             RefreshMarketConsent();
             RefreshCodexPrices();
+            if (_activePage == "trade") _tradePage?.Refresh();
         };
         // Both buttons are ghost StripButtons by design (mock review ruling): the accent
         // "Turn on" from the mock is deliberately NOT copied.

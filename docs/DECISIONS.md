@@ -163,7 +163,7 @@ Keep the last known good data when a provider refresh fails.
 
 Issue #4 implements the first independent UEX provider and cache layer.
 
-Issue #5 builds the first native Market view on that layer.
+Issue #5 folds the first native catalog browser into Trade's Market tab.
 
 ## D-011: Cache UEX rows with merge-newer and a fetch throttle
 

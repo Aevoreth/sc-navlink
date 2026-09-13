@@ -18,7 +18,7 @@ Planned work:
 - implement a dedicated UEX client using public API documentation;
 - add SQLite-backed caching with provider-specific freshness/TTL rules;
 - expose data age and stale/offline state in the UI;
-- create the first SC-navLink-native Market view for commodity/location/price browsing;
+- create the first SC-navLink-native Market catalog browser on Trade's Market tab;
 - create an initial `NEXT` model that can at least consume current location and known hauling stops;
 - retain inherited Nexus functionality during the transition wherever practical.
 
