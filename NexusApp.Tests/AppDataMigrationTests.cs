@@ -50,6 +50,41 @@ public class AppDataMigrationTests : IDisposable
     }
 
     [Fact]
+    public void CopiesMissingFilesWhenDestOnlyHasLogsFolder()
+    {
+        var current = Path.Combine(_root, AppIdentity.AppDataFolder);
+        var legacy = Path.Combine(_root, AppIdentity.LegacyAppDataFolder);
+        Directory.CreateDirectory(Path.Combine(current, "logs"));
+        Directory.CreateDirectory(legacy);
+        File.WriteAllText(Path.Combine(current, "logs", "nexus.log"), "new-log");
+        File.WriteAllText(Path.Combine(legacy, "settings.json"), "from-legacy");
+        File.WriteAllText(Path.Combine(legacy, "wallet.json"), "wallet");
+
+        SettingsService.MigrateLegacyAppData(_root);
+
+        Assert.Equal("from-legacy", File.ReadAllText(Path.Combine(current, "settings.json")));
+        Assert.Equal("wallet", File.ReadAllText(Path.Combine(current, "wallet.json")));
+        Assert.Equal("new-log", File.ReadAllText(Path.Combine(current, "logs", "nexus.log")));
+    }
+
+    [Fact]
+    public void CopiesMissingLegacyFilesWithoutReplacingExistingSettings()
+    {
+        var current = Path.Combine(_root, AppIdentity.AppDataFolder);
+        var legacy = Path.Combine(_root, AppIdentity.LegacyAppDataFolder);
+        Directory.CreateDirectory(current);
+        Directory.CreateDirectory(legacy);
+        File.WriteAllText(Path.Combine(current, "settings.json"), "keep");
+        File.WriteAllText(Path.Combine(legacy, "settings.json"), "old");
+        File.WriteAllText(Path.Combine(legacy, "wallet.json"), "wallet");
+
+        SettingsService.MigrateLegacyAppData(_root);
+
+        Assert.Equal("keep", File.ReadAllText(Path.Combine(current, "settings.json")));
+        Assert.Equal("wallet", File.ReadAllText(Path.Combine(current, "wallet.json")));
+    }
+
+    [Fact]
     public void CopiesV4TopLevelFilesIntoNexusAppThenIntoScNavlink()
     {
         var v4 = Path.Combine(_root, AppIdentity.LegacyV4Folder);
