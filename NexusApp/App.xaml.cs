@@ -303,6 +303,11 @@ public partial class App : Application
             Dispatcher.BeginInvoke(new Action(RestoreMainWindow));
         });
 
+        // Copy missing files from %AppData%\NexusApp before the first log write when possible.
+        // Logger creates %AppData%\sc-navlink\logs, so migration must fill files that are
+        // still absent rather than treat a dest directory as complete.
+        if (!AppPaths.IsDemoProfile) SettingsService.MigrateLegacyAppData();
+
         Logger.Info($"[WIN] Nexus {AppInfo.Version} starting");
         Logger.Info($"[WIN] Distribution: {AppInfo.Distribution}");
         if (AppPaths.IsDemoProfile)
@@ -326,10 +331,6 @@ public partial class App : Application
         _foreground.Start();
         SystemEventBreadcrumbs.Start();
 
-        // One-time migration of user data from the old %AppData%\Nexus_v4 folder
-        // (pre-5.0.1) to the version-neutral %AppData%\NexusApp, so upgraders
-        // keep their settings, work orders and history. Runs before anything reads.
-        if (!AppPaths.IsDemoProfile) SettingsService.MigrateLegacyAppData();
         Settings = new SettingsService(gameState: GameState);
         // Demo isolation includes the Game.log source; see DemoProfile.PinGameLogPath.
         if (AppPaths.IsDemoProfile)

@@ -14,11 +14,13 @@ public class SettingsService
     private static readonly JsonSerializerOptions _opts = new() { WriteIndented = true };
 
     /// <summary>
-    /// One-time copy of user data onto the current app-data folder.
-    /// First copies top-level files from %AppData%\Nexus_v4 into %AppData%\NexusApp
-    /// when that intermediate folder is absent. Then copies the full NexusApp tree
-    /// into %AppData%\sc-navlink. Best-effort and idempotent: it no-ops once the
-    /// destination exists, and leaves the source folder in place as a backup.
+    /// Copy of user data onto the current app-data folder.
+    /// First copies missing top-level files from %AppData%\Nexus_v4 into
+    /// %AppData%\NexusApp. Then copies missing files from the NexusApp tree
+    /// into %AppData%\sc-navlink. Best-effort: never overwrites a file that
+    /// already exists at the destination, and leaves the source folder in place
+    /// as a backup. Startup logging can create a logs folder first, so a dest
+    /// directory is not treated as a completed migration.
     /// Call this once at startup before any settings/data is read.
     /// </summary>
     public static void MigrateLegacyAppData()
@@ -35,24 +37,28 @@ public class SettingsService
         var v4 = Path.Combine(appDataDir, AppIdentity.LegacyV4Folder);
         var nexus = Path.Combine(appDataDir, AppIdentity.LegacyAppDataFolder);
         var current = Path.Combine(appDataDir, AppIdentity.AppDataFolder);
-        CopyTopLevelFilesIfAbsent(nexus, v4);
-        CopyTreeIfAbsent(current, nexus);
-        CopyTreeIfAbsent(
+        CopyMissingTopLevelFiles(nexus, v4);
+        CopyMissingTree(current, nexus);
+        CopyMissingTree(
             Path.Combine(appDataDir, AppIdentity.AppDataFolderDemo),
             Path.Combine(appDataDir, AppIdentity.LegacyAppDataFolderDemo));
     }
 
-    private static void CopyTopLevelFilesIfAbsent(string dest, string src)
+    private static void CopyMissingTopLevelFiles(string dest, string src)
     {
-        if (Directory.Exists(dest) || !Directory.Exists(src)) return;
+        if (!Directory.Exists(src)) return;
         Directory.CreateDirectory(dest);
         foreach (var file in Directory.GetFiles(src))
-            File.Copy(file, Path.Combine(dest, Path.GetFileName(file)), overwrite: false);
+        {
+            var target = Path.Combine(dest, Path.GetFileName(file));
+            if (!File.Exists(target))
+                File.Copy(file, target, overwrite: false);
+        }
     }
 
-    private static void CopyTreeIfAbsent(string dest, string src)
+    private static void CopyMissingTree(string dest, string src)
     {
-        if (Directory.Exists(dest) || !Directory.Exists(src)) return;
+        if (!Directory.Exists(src)) return;
         CopyTree(src, dest);
     }
 
@@ -60,7 +66,11 @@ public class SettingsService
     {
         Directory.CreateDirectory(dest);
         foreach (var file in Directory.GetFiles(src))
-            File.Copy(file, Path.Combine(dest, Path.GetFileName(file)), overwrite: false);
+        {
+            var target = Path.Combine(dest, Path.GetFileName(file));
+            if (!File.Exists(target))
+                File.Copy(file, target, overwrite: false);
+        }
         foreach (var dir in Directory.GetDirectories(src))
             CopyTree(dir, Path.Combine(dest, Path.GetFileName(dir)));
     }
