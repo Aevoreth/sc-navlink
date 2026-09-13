@@ -71,6 +71,8 @@ public class MarketDataServiceTests : IDisposable
     }
 
     private static string Url(string endpoint) => MarketDataService.BaseUrl + endpoint;
+    private static string CacheDb(string snapshotPath) =>
+        Path.Combine(Path.GetDirectoryName(snapshotPath)!, ProviderCacheStore.FileName);
     // The one price leg, per commodity id: no bulk endpoint returns the full row shape.
     private static string RefinedUrl(int id) => Url($"commodities_prices?id_commodity={id}");
 
@@ -282,11 +284,13 @@ public class MarketDataServiceTests : IDisposable
         Assert.Contains(snap.RefinedPrices.Rows, r => r.CommodityId == 11 && r.TerminalId == 200);
         Assert.Contains(snap.RefinedPrices.Rows, r => r.CommodityId == 21 && r.TerminalId == 201);
 
-        Assert.True(File.Exists(snapshotPath));
+        Assert.True(File.Exists(CacheDb(snapshotPath)));
         Assert.NotNull(settings.Current.LastMarketFetchUtc);
         Assert.Equal(1, changed);
         Assert.Null(svc.LastError);
         Assert.False(svc.FetchInProgress);
+        Assert.Equal(ProviderFreshness.Fresh, svc.TradePrices.Freshness);
+        Assert.Single(svc.TradePrices.Items);
     }
 
     [Fact]
@@ -295,9 +299,13 @@ public class MarketDataServiceTests : IDisposable
         var (svc, t, _, snapshotPath) = Make();
         SeedAll(t);
         await svc.RefreshAsync(manual: true);
+        svc.Dispose();
 
-        var reloaded = MarketSnapshotFile.Load(snapshotPath, out var reason);
-        Assert.Null(reason);
+        var settings = new SettingsService(Path.Combine(Path.GetDirectoryName(Path.GetDirectoryName(snapshotPath))!, "settings-reload.json"));
+        using var reloadedSvc = new MarketDataService(settings, t, snapshotPath, isDemoProfile: false);
+        reloadedSvc.LoadSnapshotFromDisk();
+
+        var reloaded = reloadedSvc.Snapshot;
         Assert.NotNull(reloaded);
         Assert.Equal("4.9.1", reloaded!.LiveGameVersion);
         Assert.Equal(2, reloaded.RefinedPrices.Rows.Count);
@@ -548,7 +556,7 @@ public class MarketDataServiceTests : IDisposable
         Assert.DoesNotContain(t.Requested, u => u.StartsWith(Url("commodities_prices"), StringComparison.Ordinal));
         Assert.NotNull(svc.LastError);
         Assert.Equal(1, changed);
-        Assert.True(File.Exists(snapshotPath));
+        Assert.True(File.Exists(CacheDb(snapshotPath)));
         Assert.NotNull(settings.Current.LastMarketFetchUtc);
     }
 
@@ -606,7 +614,7 @@ public class MarketDataServiceTests : IDisposable
         // The task's own completion flag settles on the pool thread, so give it a bounded
         // asynchronous wait instead of asserting the instantaneous state.
         Assert.Same(cycle, await Task.WhenAny(cycle, Task.Delay(TimeSpan.FromSeconds(5))));
-        Assert.True(File.Exists(snapshotPath));
+        Assert.True(File.Exists(CacheDb(snapshotPath)));
         Assert.NotNull(settings.Current.LastMarketFetchUtc);
         Assert.False(svc.FetchInProgress);
         await cycle;
