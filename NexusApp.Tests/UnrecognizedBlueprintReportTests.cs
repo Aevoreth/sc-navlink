@@ -56,7 +56,7 @@ public class UnrecognizedBlueprintReportTests
             starStringsDetected: true,
             timestamp: new DateTime(2026, 6, 21, 14, 32, 0));
 
-        Assert.Contains("Nexus v5.4.0", report);
+        Assert.Contains("SC-navLink v5.4.0", report);
         Assert.Contains("Mining data v1.2.4", report);
         Assert.Contains("2026-06-21 14:32", report);
         Assert.Contains("Changelist: 123", report);

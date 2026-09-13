@@ -98,7 +98,7 @@ public sealed class NexusHologram : FrameworkElement
         _lastTicks = _clock?.ElapsedTicks ?? 0;
         // Motion.Reduced contract (Motion.cs): ambient loops go static, so this control
         // must not subscribe to the render loop at all - the static frame set up by
-        // Show()/Resume() is enough (mirrors the gating idiom in NexusBeamIcon.Start()).
+        // Show()/Resume() is enough (mirrors the gating idiom in NavLinkMark.Start()).
         if (Motion.Reduced) return;
         CompositionTarget.Rendering += OnFrame;
         _hooked = true;

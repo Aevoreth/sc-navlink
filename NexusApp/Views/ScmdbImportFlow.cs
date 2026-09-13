@@ -43,7 +43,7 @@ public static class ScmdbImportFlow
             if (info.Length > ScmdbExportParser.MaxInputBytes)
             {
                 MessageBox.Show(owner,
-                    "That file is larger than 5 MB, which is bigger than any real SCMDB export - Nexus won't read it.",
+                    "That file is larger than 5 MB, which is bigger than any real SCMDB export - SC-navLink won't read it.",
                     "Import from SCMDB", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }

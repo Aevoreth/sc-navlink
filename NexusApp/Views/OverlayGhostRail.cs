@@ -98,7 +98,7 @@ public sealed class OverlayGhostRail : Grid
     // Beam cap: drag handle at the top of the rail.
     private FrameworkElement BuildCap()
     {
-        var beam = new NexusBeamIcon
+        var beam = new NavLinkMark
         {
             Width = 16,
             Height = 16,

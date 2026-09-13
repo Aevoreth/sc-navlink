@@ -103,8 +103,8 @@ internal sealed class HttpUpdateTransport : IUpdateTransport
 public sealed class UpdateService
 {
     public const string Tag = "[UPDATE]";
-    public const string ManifestUrl = "https://github.com/T3SoD/NexusApp/releases/latest/download/update_manifest.json";
-    public const string SignatureUrl = "https://github.com/T3SoD/NexusApp/releases/latest/download/update_manifest.json.sig";
+    public const string ManifestUrl = AppIdentity.ManifestUrl;
+    public const string SignatureUrl = AppIdentity.SignatureUrl;
 
     // A P-256 signature is 64 bytes, 88 as base64; 4 KB tolerates whitespace without
     // letting a hostile response waste memory.
@@ -209,7 +209,7 @@ public sealed class UpdateService
     // (never releases/latest, which could race a newer release mid-flow) and a whitelisted
     // asset name. A parsed Version cannot carry path or URL metacharacters.
     internal static string AssetUrl(Version version, string assetName) =>
-        $"https://github.com/T3SoD/NexusApp/releases/download/v{version.ToString(3)}/{assetName}";
+        AppIdentity.AssetUrl(version, assetName);
 
     public async Task CheckAsync(bool manual)
     {

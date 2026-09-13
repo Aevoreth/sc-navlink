@@ -4428,7 +4428,7 @@ public partial class OverlayWindow : Window
         {
             // Serve-stale-with-age (EmptyOrStaleNote's exact rule, TradePage.Planner.cs).
             TradePanelItems.Children.Add(Note(snap is null || snap.TradePrices.FetchedUtc == default
-                ? "No trade price data yet. It refreshes about once an hour while Nexus is open."
+                ? "No trade price data yet. It refreshes about once an hour while SC-navLink is open."
                 : $"No trade routes to show right now (data from {MarketNotice.FormatAge(DateTime.UtcNow - snap.TradePrices.FetchedUtc)})."));
             return;
         }

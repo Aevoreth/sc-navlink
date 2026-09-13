@@ -14,27 +14,65 @@ public class SettingsService
     private static readonly JsonSerializerOptions _opts = new() { WriteIndented = true };
 
     /// <summary>
-    /// One-time move of user data from the old version-tagged AppData folder
-    /// (%AppData%\Nexus_v4, used through 5.0.0) to the version-neutral
-    /// %AppData%\NexusApp. Copies the existing files (settings.json + nexus.db)
-    /// so upgraders keep their theme, window layout, pinned resources, work
-    /// orders and scan history. Best-effort and idempotent: it no-ops once the
-    /// new folder exists, and leaves the old folder in place as a backup.
+    /// Copy of user data onto the current app-data folder.
+    /// First copies missing top-level files from %AppData%\Nexus_v4 into
+    /// %AppData%\NexusApp. Then copies missing files from the NexusApp tree
+    /// into %AppData%\sc-navlink. Best-effort: never overwrites a file that
+    /// already exists at the destination, and leaves the source folder in place
+    /// as a backup. Startup logging can create a logs folder first, so a dest
+    /// directory is not treated as a completed migration.
     /// Call this once at startup before any settings/data is read.
     /// </summary>
     public static void MigrateLegacyAppData()
     {
         try
         {
-            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            var current = Path.Combine(appData, "NexusApp");
-            var legacy  = Path.Combine(appData, "Nexus_v4");
-            if (Directory.Exists(current) || !Directory.Exists(legacy)) return;
-            Directory.CreateDirectory(current);
-            foreach (var src in Directory.GetFiles(legacy))
-                File.Copy(src, Path.Combine(current, Path.GetFileName(src)), overwrite: false);
+            MigrateLegacyAppData(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData));
         }
         catch { /* a fresh folder is acceptable if the copy fails */ }
+    }
+
+    internal static void MigrateLegacyAppData(string appDataDir)
+    {
+        var v4 = Path.Combine(appDataDir, AppIdentity.LegacyV4Folder);
+        var nexus = Path.Combine(appDataDir, AppIdentity.LegacyAppDataFolder);
+        var current = Path.Combine(appDataDir, AppIdentity.AppDataFolder);
+        CopyMissingTopLevelFiles(nexus, v4);
+        CopyMissingTree(current, nexus);
+        CopyMissingTree(
+            Path.Combine(appDataDir, AppIdentity.AppDataFolderDemo),
+            Path.Combine(appDataDir, AppIdentity.LegacyAppDataFolderDemo));
+    }
+
+    private static void CopyMissingTopLevelFiles(string dest, string src)
+    {
+        if (!Directory.Exists(src)) return;
+        Directory.CreateDirectory(dest);
+        foreach (var file in Directory.GetFiles(src))
+        {
+            var target = Path.Combine(dest, Path.GetFileName(file));
+            if (!File.Exists(target))
+                File.Copy(file, target, overwrite: false);
+        }
+    }
+
+    private static void CopyMissingTree(string dest, string src)
+    {
+        if (!Directory.Exists(src)) return;
+        CopyTree(src, dest);
+    }
+
+    private static void CopyTree(string src, string dest)
+    {
+        Directory.CreateDirectory(dest);
+        foreach (var file in Directory.GetFiles(src))
+        {
+            var target = Path.Combine(dest, Path.GetFileName(file));
+            if (!File.Exists(target))
+                File.Copy(file, target, overwrite: false);
+        }
+        foreach (var dir in Directory.GetDirectories(src))
+            CopyTree(dir, Path.Combine(dest, Path.GetFileName(dir)));
     }
 
     public AppSettings Current { get; private set; }
@@ -46,7 +84,7 @@ public class SettingsService
     public GameState? GameState { get; }
 
     /// <param name="settingsPath">
-    /// Override the settings file location. Defaults to %AppData%\NexusApp\settings.json.
+    /// Override the settings file location. Defaults to %AppData%\sc-navlink\settings.json.
     /// Used by tests to point at a temp file instead of the real user profile.
     /// </param>
     public SettingsService(string? settingsPath = null, GameState? gameState = null)

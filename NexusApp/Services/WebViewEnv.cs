@@ -17,7 +17,7 @@ internal static class WebViewEnv
         {
             // Keep the WebView2 profile in a writable per-user folder (the exe may live under Program Files).
             var dataFolder = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NexusApp",
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppIdentity.AppDataFolder,
                 AppPaths.IsDemoProfile ? "WebView2_demo" : "WebView2");
             Directory.CreateDirectory(dataFolder);
             _sharedEnv = CoreWebView2Environment.CreateAsync(null, dataFolder, null);

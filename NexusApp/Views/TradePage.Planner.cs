@@ -1415,7 +1415,7 @@ public sealed partial class TradePage
     private static TextBlock EmptyOrStaleNote(DateTime? fetchedUtc) => new()
     {
         Text = fetchedUtc is null || fetchedUtc.Value == default
-            ? "No trade price data yet. It refreshes about once an hour while Nexus is open."
+            ? "No trade price data yet. It refreshes about once an hour while SC-navLink is open."
             : $"No trade routes to show right now (data from {MarketNotice.FormatAge(DateTime.UtcNow - fetchedUtc!.Value)}).",
         FontFamily = Hud.Font("UiFont"), FontSize = 12.5, Foreground = Hud.Br("FgDimBrush"),
     };

@@ -158,7 +158,7 @@ public class UpdateServiceTests : IDisposable
         var svc = new UpdateService(settings, t,
             (m, s) => UpdateVerifier.VerifySignature(m, s, Key.pub),
             () => distribution, currentVersion, Path.Combine(dir, "updates"), demo,
-            p => true, swapper, purgeGuard ?? (() => false), () => @"C:\fake\NexusApp.exe");
+            p => true, swapper, purgeGuard ?? (() => false), () => @"C:\fake\SC-navLink.exe");
         return (svc, t, settings, dir, swapper);
     }
 
@@ -364,8 +364,8 @@ public class UpdateServiceTests : IDisposable
 
     [Fact]
     public void AssetUrl_IsPinnedToTheVersionedReleasePath() =>
-        Assert.Equal("https://github.com/T3SoD/NexusApp/releases/download/v6.7.0/Nexus_Setup.exe",
-            UpdateService.AssetUrl(new Version(6, 7, 0), "Nexus_Setup.exe"));
+        Assert.Equal("https://github.com/Aevoreth/sc-navlink/releases/download/v6.7.0/SC-navLink_Setup.exe",
+            UpdateService.AssetUrl(new Version(6, 7, 0), "SC-navLink_Setup.exe"));
 
     [Fact]
     public async Task Changed_FiresOnStateTransitions()
@@ -397,12 +397,12 @@ public class UpdateServiceTests : IDisposable
         var payload = Encoding.UTF8.GetBytes("the installer bytes");
         var (svc, t, _, dir, _) = Make2();
         Publish(t, UpdateManifestTests.ValidJson(version: "9.9.9", setupHash: HashOf(payload), setupSize: payload.Length));
-        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "Nexus_Setup.exe")] = payload;
+        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "SC-navLink_Setup.exe")] = payload;
         await svc.CheckAsync(manual: true);
         await svc.DownloadAsync();
         Assert.Equal(UpdateState.ReadyToInstall, svc.State);
         Assert.True(File.Exists(svc.DownloadedPath));
-        Assert.EndsWith("Nexus_Setup.exe", svc.DownloadedPath);
+        Assert.EndsWith("SC-navLink_Setup.exe", svc.DownloadedPath);
         Assert.DoesNotContain(".partial", svc.DownloadedPath);
         Assert.Contains(Path.Combine(dir, "updates"), svc.DownloadedPath);
     }
@@ -415,7 +415,7 @@ public class UpdateServiceTests : IDisposable
         // Manifest declares the right size but a WRONG hash: the classic swapped-asset attack.
         Publish(t, UpdateManifestTests.ValidJson(version: "9.9.9",
             setupHash: new string('c', 64), setupSize: payload.Length));
-        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "Nexus_Setup.exe")] = payload;
+        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "SC-navLink_Setup.exe")] = payload;
         await svc.CheckAsync(manual: true);
         await svc.DownloadAsync();
         Assert.Equal(UpdateState.Failed, svc.State);
@@ -431,7 +431,7 @@ public class UpdateServiceTests : IDisposable
         var payload = Encoding.UTF8.GetBytes("the installer bytes");
         var (svc, t, _, _, _) = Make2();
         Publish(t, UpdateManifestTests.ValidJson(version: "9.9.9", setupHash: HashOf(payload), setupSize: payload.Length + 5));
-        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "Nexus_Setup.exe")] = payload;
+        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "SC-navLink_Setup.exe")] = payload;
         await svc.CheckAsync(manual: true);
         await svc.DownloadAsync();
         Assert.Equal(UpdateState.Failed, svc.State);
@@ -443,11 +443,11 @@ public class UpdateServiceTests : IDisposable
         var payload = Encoding.UTF8.GetBytes("zip bytes");
         var (svc, t, _, _, _) = Make2(distribution: "Portable");
         Publish(t, UpdateManifestTests.ValidJson(version: "9.9.9", portableHash: HashOf(payload), portableSize: payload.Length));
-        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "NexusApp_portable.zip")] = payload;
+        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "sc-navlink_portable.zip")] = payload;
         await svc.CheckAsync(manual: true);
         await svc.DownloadAsync();
         Assert.Equal(UpdateState.ReadyToInstall, svc.State);
-        Assert.EndsWith("NexusApp_portable.zip", svc.DownloadedPath);
+        Assert.EndsWith("sc-navlink_portable.zip", svc.DownloadedPath);
     }
 
     // The UI subscribes to Changed and rebuilds the whole Operations page on every raise, so a
@@ -461,7 +461,7 @@ public class UpdateServiceTests : IDisposable
         new Random(7).NextBytes(payload);
         var (svc, t, _, _, _) = Make2();
         Publish(t, UpdateManifestTests.ValidJson(version: "9.9.9", setupHash: HashOf(payload), setupSize: payload.Length));
-        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "Nexus_Setup.exe")] = payload;
+        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "SC-navLink_Setup.exe")] = payload;
         t.ProgressChunkBytes = 10_000;                  // 200 progress callbacks across the asset
         await svc.CheckAsync(manual: true);
 
@@ -489,13 +489,13 @@ public class UpdateServiceTests : IDisposable
         var payload = Encoding.UTF8.GetBytes("the installer bytes");
         var (svc, t, _, _, started) = Make2();
         Publish(t, UpdateManifestTests.ValidJson(version: "9.9.9", setupHash: HashOf(payload), setupSize: payload.Length));
-        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "Nexus_Setup.exe")] = payload;
+        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "SC-navLink_Setup.exe")] = payload;
         await svc.CheckAsync(manual: true);
         await svc.DownloadAsync();
         Assert.True(svc.LaunchInstaller());
         Assert.Equal(UpdateState.Installing, svc.State);
         Assert.Single(started);
-        Assert.EndsWith("Nexus_Setup.exe", started[0]);
+        Assert.EndsWith("SC-navLink_Setup.exe", started[0]);
     }
 
     [Fact]
@@ -504,7 +504,7 @@ public class UpdateServiceTests : IDisposable
         var payload = Encoding.UTF8.GetBytes("the installer bytes");
         var (svc, t, _, _, started) = Make2();
         Publish(t, UpdateManifestTests.ValidJson(version: "9.9.9", setupHash: HashOf(payload), setupSize: payload.Length));
-        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "Nexus_Setup.exe")] = payload;
+        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "SC-navLink_Setup.exe")] = payload;
         await svc.CheckAsync(manual: true);
         await svc.DownloadAsync();
         File.WriteAllBytes(svc.DownloadedPath!, Encoding.UTF8.GetBytes("tampered"));   // verify-to-execute window
@@ -530,7 +530,7 @@ public class UpdateServiceTests : IDisposable
         var payload = Encoding.UTF8.GetBytes("the installer bytes");
         var (svc, t, _, dir, _) = Make2();
         Publish(t, UpdateManifestTests.ValidJson(version: "9.9.9", setupHash: HashOf(payload), setupSize: payload.Length));
-        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "Nexus_Setup.exe")] = payload;
+        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "SC-navLink_Setup.exe")] = payload;
         await svc.CheckAsync(manual: true);
         var updates = Path.Combine(dir, "updates");
         Directory.CreateDirectory(updates);
@@ -550,10 +550,10 @@ public class UpdateServiceTests : IDisposable
         var payload = Encoding.UTF8.GetBytes("the installer bytes");
         var (svc, t, _, dir, _) = Make2();
         Publish(t, UpdateManifestTests.ValidJson(version: "9.9.9", setupHash: HashOf(payload), setupSize: payload.Length));
-        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "Nexus_Setup.exe")] = payload;
+        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "SC-navLink_Setup.exe")] = payload;
         await svc.CheckAsync(manual: true);
         var updates = Path.Combine(dir, "updates");
-        Directory.CreateDirectory(Path.Combine(updates, "9.9.9", "Nexus_Setup.exe"));
+        Directory.CreateDirectory(Path.Combine(updates, "9.9.9", "SC-navLink_Setup.exe"));
         await svc.DownloadAsync();                      // must not throw
         Assert.Equal(UpdateState.Failed, svc.State);
         Assert.Null(svc.DownloadedPath);
@@ -569,7 +569,7 @@ public class UpdateServiceTests : IDisposable
         var payload = Encoding.UTF8.GetBytes("zip bytes");
         var (svc, t, _, _, started) = Make2(distribution: "Portable");
         Publish(t, UpdateManifestTests.ValidJson(version: "9.9.9", portableHash: HashOf(payload), portableSize: payload.Length));
-        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "NexusApp_portable.zip")] = payload;
+        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "sc-navlink_portable.zip")] = payload;
         await svc.CheckAsync(manual: true);
         await svc.DownloadAsync();
         var downloaded = svc.DownloadedPath!;
@@ -605,8 +605,8 @@ public class UpdateServiceTests : IDisposable
         Publish(t, UpdateManifestTests.ValidJson(version: "9.9.9",
             setupHash: HashOf(setup), setupSize: setup.Length,
             portableHash: HashOf(payload), portableSize: payload.Length));
-        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "NexusApp_portable.zip")] = payload;
-        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "Nexus_Setup.exe")] = setup;
+        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "sc-navlink_portable.zip")] = payload;
+        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "SC-navLink_Setup.exe")] = setup;
         await svc.CheckAsync(manual: true);
         await svc.DownloadAsync();
         return (svc, swapper);
@@ -629,7 +629,7 @@ public class UpdateServiceTests : IDisposable
         swapper.PreflightResult = new PortablePreflight(false, "the app file has been renamed");
         var payload = Encoding.UTF8.GetBytes("zip bytes");
         Publish(t, UpdateManifestTests.ValidJson(version: "9.9.9", portableHash: HashOf(payload), portableSize: payload.Length));
-        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "NexusApp_portable.zip")] = payload;
+        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "sc-navlink_portable.zip")] = payload;
         await svc.CheckAsync(manual: true);
         await svc.DownloadAsync();
         Assert.Equal(UpdateState.ReadyToInstall, svc.State);
@@ -643,7 +643,7 @@ public class UpdateServiceTests : IDisposable
         var (svc, t, _, _, swapper) = Make3(distribution: "Installer");
         var payload = Encoding.UTF8.GetBytes("setup bytes");
         Publish(t, UpdateManifestTests.ValidJson(version: "9.9.9", setupHash: HashOf(payload), setupSize: payload.Length));
-        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "Nexus_Setup.exe")] = payload;
+        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "SC-navLink_Setup.exe")] = payload;
         await svc.CheckAsync(manual: true);
         await svc.DownloadAsync();
         Assert.Equal(0, swapper.PreflightCalls);
@@ -658,7 +658,7 @@ public class UpdateServiceTests : IDisposable
         var (svc, t, _, _, swapper) = Make3(purgeGuard: () => true);
         var payload = Encoding.UTF8.GetBytes("zip bytes");
         Publish(t, UpdateManifestTests.ValidJson(version: "9.9.9", portableHash: HashOf(payload), portableSize: payload.Length));
-        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "NexusApp_portable.zip")] = payload;
+        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "sc-navlink_portable.zip")] = payload;
         await svc.CheckAsync(manual: true);
         await svc.DownloadAsync();
         Assert.Equal(UpdateState.ReadyToInstall, svc.State);
@@ -676,7 +676,7 @@ public class UpdateServiceTests : IDisposable
         swapper.PreflightThrows = new InvalidOperationException("boom");
         var payload = Encoding.UTF8.GetBytes("zip bytes");
         Publish(t, UpdateManifestTests.ValidJson(version: "9.9.9", portableHash: HashOf(payload), portableSize: payload.Length));
-        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "NexusApp_portable.zip")] = payload;
+        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "sc-navlink_portable.zip")] = payload;
         await svc.CheckAsync(manual: true);
         await svc.DownloadAsync();
         Assert.Equal(UpdateState.ReadyToInstall, svc.State);
@@ -692,8 +692,8 @@ public class UpdateServiceTests : IDisposable
         Assert.Equal(1, swapper.ApplyCalls);
         Assert.Equal(UpdateState.Installing, svc.State);
         Assert.True(svc.PortableApplyInProgress);
-        Assert.Equal(@"C:\fake\NexusApp.exe", svc.PendingRelaunchPath);
-        Assert.Equal("Nexus 9.9.9 is available", StatusOf(svc));   // Installing keeps the available line
+        Assert.Equal(@"C:\fake\SC-navLink.exe", svc.PendingRelaunchPath);
+        Assert.Equal("SC-navLink 9.9.9 is available", StatusOf(svc));   // Installing keeps the available line
     }
 
     [Fact]
@@ -762,7 +762,7 @@ public class UpdateServiceTests : IDisposable
         await svc.UnpackForManualAsync();
         Assert.Equal(1, swapper.UnpackCalls);
         Assert.Equal(UpdateState.ManualHandoff, svc.State);
-        Assert.Equal("Nexus 9.9.9 is available", StatusOf(svc));
+        Assert.Equal("SC-navLink 9.9.9 is available", StatusOf(svc));
     }
 
     [Fact]
@@ -798,7 +798,7 @@ public class UpdateServiceTests : IDisposable
         svc.PreferManualUpdate = true;
         var payload = Encoding.UTF8.GetBytes("zip bytes");
         Publish(t, UpdateManifestTests.ValidJson(version: "9.9.9", portableHash: HashOf(payload), portableSize: payload.Length));
-        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "NexusApp_portable.zip")] = payload;
+        t.Files[UpdateService.AssetUrl(new Version(9, 9, 9), "sc-navlink_portable.zip")] = payload;
         await svc.CheckAsync(manual: true);
         await svc.DownloadAsync();
         Assert.False(svc.PortableSwapAvailable);
@@ -811,8 +811,8 @@ public class UpdateServiceTests : IDisposable
         var (svc, _, _, dir, _) = Make3(purgeGuard: () => true);
         var updates = Path.Combine(dir, "updates");
         Directory.CreateDirectory(Path.Combine(updates, "9.9.9"));
-        File.WriteAllText(Path.Combine(updates, "9.9.9", "NexusApp_portable.zip"), "the recovery artifact");
+        File.WriteAllText(Path.Combine(updates, "9.9.9", "sc-navlink_portable.zip"), "the recovery artifact");
         svc.PurgeStaleDownloads();
-        Assert.True(File.Exists(Path.Combine(updates, "9.9.9", "NexusApp_portable.zip")));
+        Assert.True(File.Exists(Path.Combine(updates, "9.9.9", "sc-navlink_portable.zip")));
     }
 }

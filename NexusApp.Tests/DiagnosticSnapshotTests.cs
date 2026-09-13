@@ -24,7 +24,7 @@ public class DiagnosticSnapshotTests
             logContents: "2026-06-22 10:00:00 [INFO] Nexus starting\n2026-06-22 10:00:01 [ERROR] boom",
             timestamp: new DateTime(2026, 6, 22, 10, 5, 0));
 
-        Assert.Contains("Nexus diagnostic snapshot", snap);
+        Assert.Contains("SC-navLink diagnostic snapshot", snap);
         Assert.Contains("Taken: 2026-06-22 10:05:00", snap);
         Assert.Contains("App version: 5.4.5", snap);
         Assert.Contains("Star Citizen game data: 4.8.2", snap);

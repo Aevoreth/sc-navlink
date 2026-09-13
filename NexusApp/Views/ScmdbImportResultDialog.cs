@@ -60,7 +60,7 @@ public sealed class ScmdbImportResultDialog : Window
         if (malformedEntries > 0)
             panel.Children.Add(Line($"{malformedEntries} entr{(malformedEntries == 1 ? "y" : "ies")} in the file couldn't be read - skipped."));
         if (missionCount > 0)
-            panel.Children.Add(Line("Mission data present in the export - not imported (Nexus only imports blueprints)."));
+            panel.Children.Add(Line("Mission data present in the export - not imported (SC-navLink only imports blueprints)."));
         if (newerVersion)
             panel.Children.Add(Line("This export was made by a newer version of SCMDB's export format than this build understands - everything recognizable was still imported."));
 

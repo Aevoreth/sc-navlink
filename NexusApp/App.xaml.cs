@@ -223,12 +223,12 @@ public partial class App : Application
         // system-side dialog before this text is ever used, so the wording can honestly own
         // the crash and pitch the snapshot (the classification pairing lives in CrashGuard).
         const string crashMessage =
-            "Nexus hit an unexpected error and needs to close.\n\n" +
-            "This looks like a bug in Nexus itself, and the file below is exactly what gets it fixed.\n\n" +
-            "Details have been saved to:\n%AppData%\\NexusApp\\logs\\nexus.log\n\n" +
-            "To help: reopen Nexus, go to Settings (cog) > Diagnostics, click \"Save snapshot\", " +
-            "and send the file to T3SoD on Discord, or attach it to a GitHub issue:\n" +
-            "https://github.com/T3SoD/NexusApp/issues";
+            "SC-navLink hit an unexpected error and needs to close.\n\n" +
+            "This looks like a bug in SC-navLink itself, and the file below is exactly what gets it fixed.\n\n" +
+            "Details have been saved to:\n%AppData%\\sc-navlink\\logs\\nexus.log\n\n" +
+            "To help: reopen SC-navLink, go to Settings (cog) > Diagnostics, click \"Save snapshot\", " +
+            "and attach the file to a GitHub issue:\n" +
+            AppIdentity.IssuesUrl;
 
         DispatcherUnhandledException += (s, ex) =>
         {
@@ -303,13 +303,18 @@ public partial class App : Application
             Dispatcher.BeginInvoke(new Action(RestoreMainWindow));
         });
 
+        // Copy missing files from %AppData%\NexusApp before the first log write when possible.
+        // Logger creates %AppData%\sc-navlink\logs, so migration must fill files that are
+        // still absent rather than treat a dest directory as complete.
+        if (!AppPaths.IsDemoProfile) SettingsService.MigrateLegacyAppData();
+
         Logger.Info($"[WIN] Nexus {AppInfo.Version} starting");
         Logger.Info($"[WIN] Distribution: {AppInfo.Distribution}");
         if (AppPaths.IsDemoProfile)
         {
             Logger.Info("[WIN] Nexus starting in demo profile mode");
             // Normally the live instance seeds before launching, but a direct
-            // "NexusApp.exe --demo-profile" start must work too. Idempotent.
+            // "SC-navLink.exe --demo-profile" start must work too. Idempotent.
             try { DemoProfile.EnsureSeeded(AppPaths.Root); }
             catch (Exception ex) { Logger.Error("[WIN] demo mode: seeding failed; continuing with an empty profile", ex); }
         }
@@ -326,10 +331,6 @@ public partial class App : Application
         _foreground.Start();
         SystemEventBreadcrumbs.Start();
 
-        // One-time migration of user data from the old %AppData%\Nexus_v4 folder
-        // (pre-5.0.1) to the version-neutral %AppData%\NexusApp, so upgraders
-        // keep their settings, work orders and history. Runs before anything reads.
-        if (!AppPaths.IsDemoProfile) SettingsService.MigrateLegacyAppData();
         Settings = new SettingsService(gameState: GameState);
         // Demo isolation includes the Game.log source; see DemoProfile.PinGameLogPath.
         if (AppPaths.IsDemoProfile)

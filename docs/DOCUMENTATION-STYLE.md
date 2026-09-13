@@ -68,6 +68,8 @@ These categories do not follow this standard. Keep the text exactly as written:
 A Technical Name stays exactly as written. Do not change a Technical Name to follow a rule. These names are Technical Names:
 
 - Star Citizen
+- SC-navLink
+- sc-navlink
 - NexusApp
 - RS Signal Decoder
 - Data.p4k

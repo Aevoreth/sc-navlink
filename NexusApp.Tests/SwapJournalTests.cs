@@ -34,7 +34,7 @@ public class SwapJournalTests : IDisposable
             AttemptedVersion = "6.9.0",
             PreviousVersion = "6.8.1",
             InstallDir = @"C:\Somewhere\NexusApp",
-            Ops = { new SwapOp { Rel = "NexusApp.exe", OldMoved = true } },
+            Ops = { new SwapOp { Rel = "SC-navLink.exe", OldMoved = true } },
         };
         j.Save(path);
         var back = SwapJournal.TryLoad(path);
@@ -59,7 +59,7 @@ public class SwapJournalTests : IDisposable
         var path = Path.Combine(TempDir(), SwapJournal.FileName);
         var j = Fixture();
         j.Save(path);
-        j.Ops.Add(new SwapOp { Rel = "NexusApp.exe" });
+        j.Ops.Add(new SwapOp { Rel = "SC-navLink.exe" });
         j.Save(path);
         Assert.False(File.Exists(path + ".tmp"));
         Assert.Single(SwapJournal.TryLoad(path)!.Ops);
@@ -127,7 +127,7 @@ public class SwapJournalTests : IDisposable
     }
 
     [Theory]
-    [InlineData("NexusApp.exe", true)]
+    [InlineData("SC-navLink.exe", true)]
     [InlineData(@"Web\cargo\index.html", true)]
     [InlineData("Web/cargo/index.html", true)]
     [InlineData("", false)]

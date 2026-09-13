@@ -34,7 +34,7 @@ public sealed class AppLogMonitorWindow : Window
 
     public AppLogMonitorWindow()
     {
-        Title = "App Log Monitor - Nexus";
+        Title = "App Log Monitor - SC-navLink";
         Width = 940; Height = 560; MinWidth = 600; MinHeight = 380;
         Background = Res("BgBrush");
         Foreground = Res("FgBrush");
@@ -71,7 +71,7 @@ public sealed class AppLogMonitorWindow : Window
         copyBtn.Click += (_, _) => CopySnapshot();
         ctl.Children.Add(copyBtn);
         var saveBtn = MakeButton("Save snapshot…"); saveBtn.Margin = new Thickness(6, 0, 0, 0);
-        saveBtn.ToolTip = "Save app/system info + this log to a file you can send to T3SoD on Discord or attach to a GitHub issue (github.com/T3SoD/NexusApp/issues)";
+        saveBtn.ToolTip = "Save app/system info + this log to a file you can send to the developer on Discord or attach to a GitHub issue (" + AppIdentity.IssuesHostPath + ")";
         saveBtn.Click += (_, _) => SaveSnapshot();
         ctl.Children.Add(saveBtn);
         Grid.SetRow(ctl, 0); root.Children.Add(ctl);
@@ -264,7 +264,7 @@ public sealed class AppLogMonitorWindow : Window
         try
         {
             Clipboard.SetText(BuildSnapshot());
-            _status.Text = "Snapshot copied - paste it to T3SoD on Discord or into a GitHub issue (github.com/T3SoD/NexusApp/issues).";
+            _status.Text = "Snapshot copied - paste it into a GitHub issue (" + AppIdentity.IssuesHostPath + ").";
         }
         catch (Exception ex) { _status.Text = $"Copy failed: {ex.Message}"; }
     }
@@ -280,7 +280,7 @@ public sealed class AppLogMonitorWindow : Window
         try
         {
             File.WriteAllText(dlg.FileName, BuildSnapshot());
-            _status.Text = $"Saved to {dlg.FileName} - send it to T3SoD on Discord or attach it to a GitHub issue (github.com/T3SoD/NexusApp/issues).";
+            _status.Text = $"Saved to {dlg.FileName} - attach it to a GitHub issue ({AppIdentity.IssuesHostPath}).";
         }
         catch (Exception ex) { _status.Text = $"Save failed: {ex.Message}"; }
     }

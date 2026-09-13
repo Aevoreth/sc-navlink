@@ -4,7 +4,7 @@ using System.Windows;
 namespace NexusApp.Services;
 
 /// <summary>
-/// App-wide visual assets and the restart helper. Nexus ships a single theme:
+/// App-wide visual assets and the restart helper. SC-navLink ships a single theme:
 /// the palette is merged statically in App.xaml (Themes/Palette.Luxury.xaml),
 /// with no first-run picker and no runtime switching.
 /// </summary>
@@ -19,8 +19,5 @@ public static class ThemeService
         Application.Current.Shutdown();
     }
 
-    // The teal command-center identity mark. Kept as one expression so a distinct
-    // overhaul logo can be slotted in later without touching call sites. The window
-    // and header icons reference Assets/nexus_icon_classic.png directly in XAML.
-    public static string LogoUri => "pack://application:,,,/Assets/nexus_logo_classic.png";
+    public static string LogoUri => AppIdentity.LogoPackUri;
 }

@@ -16,7 +16,7 @@ namespace NexusApp.Views;
 /// <summary>
 /// Renders one of the chosen dock nav icons (from <see cref="DockIconSpecs"/>) as a multi-part
 /// line glyph and plays its hover / activate animations off the parent RadioButton's state.
-/// Monochrome: every part follows the tile colour (dim at rest, amber on hover, ice-cyan when active).
+/// Monochrome: every part follows the tile colour (dim at rest, bright cyan on hover, brand cyan when active).
 /// Animations are built from the same little spec the design gallery used: per-part rotate / scale /
 /// translate / opacity keyframes plus a stroke "draw-on" (StrokeDashOffset) reveal.
 /// </summary>
@@ -373,12 +373,12 @@ public class AnimatedDockIcon : Viewbox
         return null;
     }
 
-    private void ApplyInitial() => SetColor(_staticColor ?? Res(_host?.IsChecked == true ? "CyanBrush" : "FgDimBrush"));
+    private void ApplyInitial() => SetColor(_staticColor ?? Res(_host?.IsChecked == true ? "AccentBrush" : "FgDimBrush"));
 
     private void Host_Enter(object sender, MouseEventArgs e)
     {
         if (_host?.IsChecked == true) return;
-        SetColor(Res("AccentBrush"));
+        SetColor(Res("AccentHoverBrush"));
         HoverScale(1.1);
         Play(_selected);   // run the full icon animation on mouseover
     }
@@ -393,7 +393,7 @@ public class AnimatedDockIcon : Viewbox
     private void Host_Checked(object sender, RoutedEventArgs e)
     {
         HoverScale(1.0);
-        SetColor(Res("CyanBrush"));   // selected glyph goes ice-cyan (mock: dock-schemes/cyan.html)
+        SetColor(Res("AccentBrush"));
         Play(_selected);
     }
 

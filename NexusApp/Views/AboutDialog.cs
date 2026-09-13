@@ -13,6 +13,10 @@ public class AboutDialog : Window
 {
     private static readonly (string Label, string[] Changes)[] Changelog =
     [
+        ("App  6.15.0  -  Sep 13, 2026",
+        [
+            "The product presents as SC-navLink. Window titles, the overlay, the tray, About, and the installer use the new name. A cyan mobiGlas mark replaces the inherited Nexus hex. Your saved data copies from the old NexusApp folder on first launch",
+        ]),
         ("App  6.14.6  -  Sep 4, 2026",
         [
             "Fourteen craftable blueprints the game defines without a type now import: the collector materials (Metamaterial Tests, Probe, TH-01 Propulsor) under a new Mission Items category, and the ore pods and cutter modules under Ship Components. Their log receipts now mark owned instead of reading as unrecognized",
@@ -558,7 +562,7 @@ public class AboutDialog : Window
 
     public AboutDialog()
     {
-        Title = "About Nexus";
+        Title = "About SC-navLink";
         Width = 600; Height = 660;
         PreviewKeyDown += (s, e) => { if (e.Key == System.Windows.Input.Key.Escape) DialogMotion.Close(this, base.Close); };
         Background = (Brush)Application.Current.FindResource("BgBrush");
@@ -587,7 +591,7 @@ public class AboutDialog : Window
 
         aboutPanel.Children.Add(new TextBlock
         {
-            Text = "NEXUS", FontSize = 28, FontWeight = FontWeights.Bold, FontFamily = (System.Windows.Media.FontFamily)System.Windows.Application.Current.FindResource("HeadFont"),
+            Text = "SC-navLink", FontSize = 28, FontWeight = FontWeights.Bold, FontFamily = (System.Windows.Media.FontFamily)System.Windows.Application.Current.FindResource("HeadFont"),
             Foreground = (Brush)Application.Current.FindResource("AccentBrush"),
         });
 
@@ -611,10 +615,9 @@ public class AboutDialog : Window
         AddInfoLine(aboutPanel, "Created by", "T3SoD");
         AddInfoLine(aboutPanel, "Game Data",  $"Star Citizen PU v{GameData.Version}");
         AddInfoLine(aboutPanel, "Mining Data", $"v{App.Data.MiningDataVersion}");
-        AddLinkLine(aboutPanel, "Source", "github.com/T3SoD/NexusApp",
-            "https://github.com/T3SoD/NexusApp");
-        AddLinkLine(aboutPanel, "Report a bug", "github.com/T3SoD/NexusApp/issues",
-            "https://github.com/T3SoD/NexusApp/issues");
+        AddLinkLine(aboutPanel, "Source", AppIdentity.RepoHostPath, AppIdentity.RepoUrl);
+        AddLinkLine(aboutPanel, "Report a bug", AppIdentity.IssuesHostPath, AppIdentity.IssuesUrl);
+        AddLinkLine(aboutPanel, "Derived from", "github.com/T3SoD/NexusApp", AppIdentity.AttributionUrl);
 
         // Task 13: UEX attribution credit, same text style as the info lines above.
         aboutPanel.Children.Add(new TextBlock
@@ -724,28 +727,28 @@ public class AboutDialog : Window
         legalStack.Children.Add(warnBorder);
 
         AddLegalSection("Non-Affiliation",
-            "Nexus is an unofficial, fan-made tool created independently. It is not affiliated with, " +
+            "SC-navLink is an unofficial, fan-made tool created independently. It is not affiliated with, " +
             "endorsed by, or sponsored by Cloud Imperium Games (CIG) or Roberts Space Industries (RSI). " +
             "Star Citizen®, Roberts Space Industries® and Cloud Imperium® are registered trademarks " +
             "of Cloud Imperium Rights LLC.");
 
         AddLegalSection("How This App Works",
-            "Nexus reads pixel data from your screen (screen capture) and displays reference information " +
+            "SC-navLink reads pixel data from your screen (screen capture) and displays reference information " +
             "from a local database. Session Tracking and Cargo Hauling additionally read - " +
             "read-only - the Game.log text file Star Citizen writes to disk, to auto-collect blueprints " +
             "and track the hauling contracts you accept. " +
-            "When you choose to export your library in the Blueprint Network, Nexus also reads your RSI " +
+            "When you choose to export your library in the Blueprint Network, SC-navLink also reads your RSI " +
             "handle from that same Game.log (read-only) to pre-fill it - you can use a nickname instead. " +
-            "If you use a community localization mod that renames components, Nexus can also read - " +
+            "If you use a community localization mod that renames components, SC-navLink can also read - " +
             "read-only - Star Citizen's localization file (global.ini) to translate those renamed " +
             "blueprint names back to their standard names when importing; community localization is " +
             "sanctioned by CIG. " +
             "Sharing is opt-in: nothing leaves your PC unless you export a file and send it yourself. " +
-            "Nexus does not read game memory, inject code into any process, modify any game files, or " +
+            "SC-navLink does not read game memory, inject code into any process, modify any game files, or " +
             "communicate with game servers in any way.");
 
         AddLegalSection("Anti-Cheat Compatibility",
-            "Nexus does not interact with the game process in any way and is EAC-Safe (Easy Anti-Cheat " +
+            "SC-navLink does not interact with the game process in any way and is EAC-Safe (Easy Anti-Cheat " +
             "compatible). It operates entirely outside the game - similar to having a browser or " +
             "spreadsheet open alongside Star Citizen. Reading the Game.log is an out-of-process, " +
             "read-only file read and never modifies game files.");
