@@ -12,7 +12,7 @@ The long-term goal is not to become a launcher for a collection of unrelated uti
 
 SC-navLink is currently in the **0.1 Foundation** phase.
 
-The repository was initialized from the full Git history of [Nexus](https://github.com/T3SoD/NexusApp), the MIT-licensed Star Citizen companion by T3SoD. The inherited application still contains Nexus names, assets, namespaces, installer metadata, and UX while the SC-navLink foundation is established. Those elements will be migrated deliberately rather than through one large mechanical rename.
+The repository was initialized from the full Git history of [Nexus](https://github.com/T3SoD/NexusApp), the MIT-licensed Star Citizen companion by T3SoD. The running application presents as SC-navLink. The `NexusApp` namespace and some inherited file names remain until a later rename.
 
 The inherited Nexus baseline already provides substantial functionality that SC-navLink can build upon:
 

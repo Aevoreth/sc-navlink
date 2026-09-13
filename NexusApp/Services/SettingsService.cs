@@ -14,27 +14,55 @@ public class SettingsService
     private static readonly JsonSerializerOptions _opts = new() { WriteIndented = true };
 
     /// <summary>
-    /// One-time move of user data from the old version-tagged AppData folder
-    /// (%AppData%\Nexus_v4, used through 5.0.0) to the version-neutral
-    /// %AppData%\NexusApp. Copies the existing files (settings.json + nexus.db)
-    /// so upgraders keep their theme, window layout, pinned resources, work
-    /// orders and scan history. Best-effort and idempotent: it no-ops once the
-    /// new folder exists, and leaves the old folder in place as a backup.
+    /// One-time copy of user data onto the current app-data folder.
+    /// First copies top-level files from %AppData%\Nexus_v4 into %AppData%\NexusApp
+    /// when that intermediate folder is absent. Then copies the full NexusApp tree
+    /// into %AppData%\sc-navlink. Best-effort and idempotent: it no-ops once the
+    /// destination exists, and leaves the source folder in place as a backup.
     /// Call this once at startup before any settings/data is read.
     /// </summary>
     public static void MigrateLegacyAppData()
     {
         try
         {
-            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            var current = Path.Combine(appData, "NexusApp");
-            var legacy  = Path.Combine(appData, "Nexus_v4");
-            if (Directory.Exists(current) || !Directory.Exists(legacy)) return;
-            Directory.CreateDirectory(current);
-            foreach (var src in Directory.GetFiles(legacy))
-                File.Copy(src, Path.Combine(current, Path.GetFileName(src)), overwrite: false);
+            MigrateLegacyAppData(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData));
         }
         catch { /* a fresh folder is acceptable if the copy fails */ }
+    }
+
+    internal static void MigrateLegacyAppData(string appDataDir)
+    {
+        var v4 = Path.Combine(appDataDir, AppIdentity.LegacyV4Folder);
+        var nexus = Path.Combine(appDataDir, AppIdentity.LegacyAppDataFolder);
+        var current = Path.Combine(appDataDir, AppIdentity.AppDataFolder);
+        CopyTopLevelFilesIfAbsent(nexus, v4);
+        CopyTreeIfAbsent(current, nexus);
+        CopyTreeIfAbsent(
+            Path.Combine(appDataDir, AppIdentity.AppDataFolderDemo),
+            Path.Combine(appDataDir, AppIdentity.LegacyAppDataFolderDemo));
+    }
+
+    private static void CopyTopLevelFilesIfAbsent(string dest, string src)
+    {
+        if (Directory.Exists(dest) || !Directory.Exists(src)) return;
+        Directory.CreateDirectory(dest);
+        foreach (var file in Directory.GetFiles(src))
+            File.Copy(file, Path.Combine(dest, Path.GetFileName(file)), overwrite: false);
+    }
+
+    private static void CopyTreeIfAbsent(string dest, string src)
+    {
+        if (Directory.Exists(dest) || !Directory.Exists(src)) return;
+        CopyTree(src, dest);
+    }
+
+    private static void CopyTree(string src, string dest)
+    {
+        Directory.CreateDirectory(dest);
+        foreach (var file in Directory.GetFiles(src))
+            File.Copy(file, Path.Combine(dest, Path.GetFileName(file)), overwrite: false);
+        foreach (var dir in Directory.GetDirectories(src))
+            CopyTree(dir, Path.Combine(dest, Path.GetFileName(dir)));
     }
 
     public AppSettings Current { get; private set; }
@@ -46,7 +74,7 @@ public class SettingsService
     public GameState? GameState { get; }
 
     /// <param name="settingsPath">
-    /// Override the settings file location. Defaults to %AppData%\NexusApp\settings.json.
+    /// Override the settings file location. Defaults to %AppData%\sc-navlink\settings.json.
     /// Used by tests to point at a temp file instead of the real user profile.
     /// </param>
     public SettingsService(string? settingsPath = null, GameState? gameState = null)

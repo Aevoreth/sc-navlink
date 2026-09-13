@@ -494,7 +494,7 @@ public sealed class SettingsPage : UserControl
                 App.Settings.Current.GameLogPath,
                 "Game log (*.log)|*.log|All files (*.*)|*.*", "Game.log",
                 "Required for: Session Tracking / Auto-Track Blueprints, Cargo Hauling, and Server / Shard " +
-                "tracking. Auto-detected for default installs; set it here only if Nexus can't find it.",
+                "tracking. Auto-detected for default installs; set it here only if SC-navLink can't find it.",
                 ApplyGameLogPath),
             BuildPathRow(
                 "global.ini path (optional)",
@@ -504,7 +504,7 @@ public sealed class SettingsPage : UserControl
                 "strings). Leave blank to auto-detect next to the Game.log.",
                 ApplyGlobalIniPath),
             SettingRow("Environment status",
-                "Nexus follows whichever channel is writing its Game.log (LIVE, HOTFIX, PTU, EPTU, " +
+                "SC-navLink follows whichever channel is writing its Game.log (LIVE, HOTFIX, PTU, EPTU, " +
                 "TECH-PREVIEW - siblings of the path above). Test channels never record blueprints; " +
                 "HOTFIX counts as LIVE.",
                 envStatus),
@@ -607,7 +607,7 @@ public sealed class SettingsPage : UserControl
         handleControl.Children.Add(handleLabel);
         panel.Children.Add(SectionPanel("Blueprint Network", false,
             SettingRow("Detect my RSI handle",
-                "When you export a library to share, Nexus pre-fills your RSI handle, read from Star " +
+                "When you export a library to share, SC-navLink pre-fills your RSI handle, read from Star " +
                 "Citizen's Game.log (read-only). Detect it here, or just use a nickname at export instead.",
                 handleControl, last: true)));
 
@@ -638,9 +638,9 @@ public sealed class SettingsPage : UserControl
         };
         panel.Children.Add(SectionPanel("Diagnostics", false,
             SettingRow("App Log Monitor",
-                "See Nexus's own activity log live, and save a snapshot (app info + log) to send to the " +
+                "See SC-navLink's own activity log live, and save a snapshot (app info + log) to send to the " +
                 "developer if you hit a bug, on Discord or attached to a GitHub issue at " +
-                "github.com/T3SoD/NexusApp/issues.",
+                AppIdentity.IssuesHostPath + ".",
                 openAppLogBtn, last: false),
             SettingRow("Export Game.log",
                 "Save a slice of Star Citizen's own Game.log to a file you can attach to a bug report. " +
@@ -649,12 +649,12 @@ public sealed class SettingsPage : UserControl
                 "you say otherwise.",
                 exportGameLogBtn, last: false),
             SettingRow("CPU rendering",
-                "If Nexus restarts itself or its window breaks when Star Citizen crashes or quits, " +
-                "turn this on: Nexus draws with the CPU instead of the graphics card, which sidesteps " +
-                "those display errors at a small CPU cost. Takes effect the next time Nexus starts.",
+                "If SC-navLink restarts itself or its window breaks when Star Citizen crashes or quits, " +
+                "turn this on: SC-navLink draws with the CPU instead of the graphics card, which sidesteps " +
+                "those display errors at a small CPU cost. Takes effect the next time SC-navLink starts.",
                 cpuRenderToggle, last: false),
             SettingRow("Last automatic restart",
-                "Shows the most recent time Nexus closed and reopened itself automatically after " +
+                "Shows the most recent time SC-navLink closed and reopened itself automatically after " +
                 "Windows reported a display error, usually while the game was crashing or quitting.",
                 _restartValueHost = new ContentControl
                 {
@@ -727,7 +727,7 @@ public sealed class SettingsPage : UserControl
 
             panel.Children.Add(SectionPanel("Updates", false,
                 SettingRow("Check for updates automatically",
-                    "Each time Nexus starts, it asks github.com for the latest version " +
+                    "Each time SC-navLink starts, it asks github.com for the latest version " +
                     "number. Nothing about you or your data is sent. Downloads and installs always " +
                     "ask first.",
                     checkToggle, last: false),
@@ -1125,7 +1125,7 @@ public sealed class SettingsPage : UserControl
         };
         panel.Children.Add(SectionPanel("Appearance", false,
             SettingRow("Reduce animations",
-                "Minimize motion across Nexus: skip page transitions, the dock and HUD pulses, " +
+                "Minimize motion across SC-navLink: skip page transitions, the dock and HUD pulses, " +
                 "count-ups and the ambient panel glyphs. Takes full effect as you move between pages.",
                 reduceToggle, last: false),
             SettingRow("24-hour clock",
@@ -1151,9 +1151,9 @@ public sealed class SettingsPage : UserControl
 
         panel.Children.Add(SectionPanel("Window", false,
             SettingRow("Close button",
-                "What the X button does. Exit closes Nexus. Minimize sends it to the taskbar. " +
+                "What the X button does. Exit closes SC-navLink. Minimize sends it to the taskbar. " +
                 "Tray hides it into the notification area beside the clock, where clicking its icon " +
-                "brings it back and right-clicking offers Exit. Nexus keeps reading Game.log either " +
+                "brings it back and right-clicking offers Exit. SC-navLink keeps reading Game.log either " +
                 "way, so your session, hauls and overlay carry on.",
                 BuildCloseActionPills(), last: true)));
 
@@ -1267,7 +1267,7 @@ public sealed class SettingsPage : UserControl
         clearBtn.MouseLeftButtonUp += (s, e) => ClearSavedData();
         panel.Children.Add(SectionPanel("Data", true,
             SettingRow("Clear saved data",
-                "Clear everything you've saved in Nexus: owned blueprints, Blueprint Network members and " +
+                "Clear everything you've saved in SC-navLink: owned blueprints, Blueprint Network members and " +
                 "groups, your detected RSI handle, shopping cart, work orders and pinned resources. The " +
                 "mining reference data is not affected.",
                 clearBtn, last: true)));
@@ -1706,7 +1706,7 @@ public sealed class SettingsPage : UserControl
         App.Settings.ClearLocalNetworkIdentity();
 
         var restart = MessageBox.Show(
-            "All saved data has been cleared.\n\nNexus needs to restart to refresh. Restart now?",
+            "All saved data has been cleared.\n\nSC-navLink needs to restart to refresh. Restart now?",
             "Data cleared",
             MessageBoxButton.YesNo, MessageBoxImage.Information, MessageBoxResult.Yes);
         if (restart == MessageBoxResult.Yes)

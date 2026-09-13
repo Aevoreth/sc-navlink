@@ -127,11 +127,11 @@ public static class CrashGuard
             {
                 Logger.Error("[WIN] render thread failed again within the relaunch window - exiting without relaunch");
                 ShowCrashMessageAndExit(
-                    "Nexus lost its connection to the display twice in a row. This usually happens " +
+                    "SC-navLink lost its connection to the display twice in a row. This usually happens " +
                     "while Star Citizen or its graphics driver is crashing.\n\n" +
-                    "Close the game, then start Nexus again. If this keeps happening, turn on " +
+                    "Close the game, then start SC-navLink again. If this keeps happening, turn on " +
                     "CPU rendering in Settings (cog) > Diagnostics.\n\n" +
-                    "Details have been saved to:\n%AppData%\\NexusApp\\logs\\nexus.log");
+                    "Details have been saved to:\n" + AppIdentity.AppDataLogHint);
             }
         }
         catch { /* crash path must never throw */ }
@@ -167,7 +167,7 @@ public static class CrashGuard
     private static void NativeMessageBox(string message)
     {
         const uint MB_OK = 0x0, MB_ICONERROR = 0x10, MB_SETFOREGROUND = 0x10000, MB_TOPMOST = 0x40000;
-        _ = MessageBoxW(IntPtr.Zero, message, "Nexus - Unexpected Error",
+        _ = MessageBoxW(IntPtr.Zero, message, "SC-navLink - Unexpected Error",
             MB_OK | MB_ICONERROR | MB_SETFOREGROUND | MB_TOPMOST);
     }
 

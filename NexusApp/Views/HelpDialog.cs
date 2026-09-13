@@ -26,7 +26,7 @@ public class HelpDialog : Window
     private static readonly Topic[] Topics =
     [
         new("⧉", "Overlay",
-            "A floating window that keeps Nexus on top of your game so you can scan and plan without alt-tabbing.",
+            "A floating window that keeps SC-navLink on top of your game so you can scan and plan without alt-tabbing.",
             [new("⧉", "open"), new("✕", "close")],
             [
                 "Click ⧉ in the top-right of the main window to open the floating overlay.",
@@ -44,16 +44,16 @@ public class HelpDialog : Window
             ]),
 
         new("◎", "Auto-scan",
-            "Let Nexus read RS values straight off your screen and decode them automatically as you mine.",
+            "Let SC-navLink read RS values straight off your screen and decode them automatically as you mine.",
             [new("⊕", "set RS region"), new("Auto-scan RS", "switch"), new("Show/Hide box", "switch")],
             [
                 "Switch to the SCAN tab in the overlay to access all RS scan controls.",
                 "Click ⊕ Set RS detection region - your cursor becomes a crosshair.",
                 "Click and drag a rectangle over the RS value shown in your game.",
                 "img:/Assets/RS_Signature.png",
-                "Turn on the Auto-scan RS switch - Nexus reads the region several times a second and confirms a value after two matching reads.",
-                "Auto-scan starts off on launch - Nexus only captures the screen while the switch is on.",
-                "Scanning pauses on its own while both Nexus and Star Citizen are in the background, and resumes when either returns to the front - the HUB light shows yellow while paused.",
+                "Turn on the Auto-scan RS switch - SC-navLink reads the region several times a second and confirms a value after two matching reads.",
+                "Auto-scan starts off on launch - SC-navLink only captures the screen while the switch is on.",
+                "Scanning pauses on its own while both SC-navLink and Star Citizen are in the background, and resumes when either returns to the front - the HUB light shows yellow while paused.",
                 "Use the Show/Hide RS detection box switch to see the magenta scan box on screen - it's hidden by default.",
                 "Contract scanning for Cargo Hauling uses its own separate detection box - see Cargo Hauling.",
                 "Use the opacity slider in the overlay header to adjust transparency (20-100%) - it's on every tab and the refinery flyout dims along with it.",
@@ -61,7 +61,7 @@ public class HelpDialog : Window
             ]),
 
         new("dock:rs", "RS Signal Decoder",
-            "Type an RS value and Nexus tells you the resource, node count, rarity color, and how confident the match is.",
+            "Type an RS value and SC-navLink tells you the resource, node count, rarity color, and how confident the match is.",
             [new("Enter", "run scan"), new("Clear", "wipe history")],
             [
                 "Open the RS Decoder module in the app dock.",
@@ -112,7 +112,7 @@ public class HelpDialog : Window
             ]),
 
         new("✓", "Session Tracking",
-            "Nexus reads Star Citizen's Game.log and auto-collects blueprints you receive - marking them Owned live as you play, or in bulk from past logs. Always on.",
+            "SC-navLink reads Star Citizen's Game.log and auto-collects blueprints you receive - marking them Owned live as you play, or in bulk from past logs. Always on.",
             [new("SESSION", "header pill"), new("Import", "past logs")],
             [
                 "Session tracking and blueprint auto-collect are always on - there's nothing to switch on.",
@@ -124,12 +124,12 @@ public class HelpDialog : Window
                 "The overlay HUB shows the READY ORDERS and HAUL tiles plus the Collection Log feed, whose header carries a live blueprint count; counts reset when Star Citizen starts a new session.",
                 "For more control, open the advanced monitor from Settings › Game.log Paths › Open Game.log Monitor - a raw log view, snapshot export, and Reset session.",
                 "Import owned from logs… in the Blueprint Library scans your current log plus the logbackups folder and collects everything you've already received (after a preview and confirmation).",
-                "If Nexus can't find your Game.log, set its path in Settings › Game.log Paths.",
-                "Nexus only reads the log file - it never writes to game files or touches the game process.",
+                "If SC-navLink can't find your Game.log, set its path in Settings › Game.log Paths.",
+                "SC-navLink only reads the log file - it never writes to game files or touches the game process.",
             ]),
 
         new("dock:codex", "Mining Codex",
-            "The full reference table of every resource Nexus knows - search and filter it to plan a route before you undock.",
+            "The full reference table of every resource SC-navLink knows - search and filter it to plan a route before you undock.",
             [new("✕", "clear search"), new("Key ▾", "color key"), new("Reset filters", "")],
             [
                 "Open the Mining Codex module in the app dock.",
@@ -188,38 +188,38 @@ public class HelpDialog : Window
                 "The group switcher scopes coverage to a group or to everyone; you're always counted in coverage.",
                 "Scope any tab to a single member with the person switcher - see exactly what one friend owns or is missing.",
                 "Settings › Blueprint Network can detect your RSI handle (read-only, from Game.log) so exports come pre-filled - or just use a nickname at export.",
-                "No server, no account - Nexus uploads nothing on its own; your library leaves your PC only when you export a file and share it yourself.",
+                "No server, no account - SC-navLink uploads nothing on its own; your library leaves your PC only when you export a file and share it yourself.",
             ]),
 
         new("◈", "Market Data",
-            "Live sell prices from UEX, a community price database, shown wherever Nexus already tells you what an ore is worth. Off by default, and only ever on with your say-so.",
+            "Live sell prices from UEX, a community price database, shown wherever SC-navLink already tells you what an ore is worth. Off by default, and only ever on with your say-so.",
             [new("MARKET", "header pill"), new("Refresh now", "Settings › Updates")],
             [
-                "Live market data is off until you turn it on - Nexus asks once, in a consent strip on the RS Decoder, Mining Codex, or Refinery Tracker page (whichever you open first), or turn it on directly in Settings › Updates.",
-                "Turning it on fetches refined sell prices from UEX community reports about once an hour while Nexus is open; turning it off stops all network activity for the feature.",
+                "Live market data is off until you turn it on - SC-navLink asks once, in a consent strip on the RS Decoder, Mining Codex, or Refinery Tracker page (whichever you open first), or turn it on directly in Settings › Updates.",
+                "Turning it on fetches refined sell prices from UEX community reports about once an hour while SC-navLink is open; turning it off stops all network activity for the feature.",
                 "Prices appear on the RS Decoder's best-match hero (\"Sell (refined, avg):\"), the Mining Codex dossier's VALUE section (\"Best sell:\"), Refinery Tracker work order cards (\"SELL\", with a + more / Show less for orders with several priced resources), and the overlay's SCAN tab result cards (\"Sell:\").",
-                "Every price shows its age (like \"2h ago\"); a price still quoted from an older game patch is grayed with a patch tag instead - Nexus never presents stale community data as current.",
+                "Every price shows its age (like \"2h ago\"); a price still quoted from an older game patch is grayed with a patch tag instead - SC-navLink never presents stale community data as current.",
                 "The MARKET pill in the header status strip is hidden entirely while the feature is off, and otherwise shows the last refresh time at a glance (or syncing / no data / offline while a first cycle runs or fails). Click it to jump to Settings.",
                 "The Mining Codex list has its own opt-in Show sell prices column, off by default, for comparing ores at a glance without opening every dossier.",
                 "Refresh now in Settings › Updates fetches the latest prices immediately, regardless of the hourly schedule.",
-                "Settings › Updates also shows the last-refresh status line, how often Nexus checks, and credits the source: Data: UEX community reports.",
-                "Nexus keeps the last snapshot on your computer, so prices (with their age) still show if UEX is unreachable or Nexus is offline.",
+                "Settings › Updates also shows the last-refresh status line, how often SC-navLink checks, and credits the source: Data: UEX community reports.",
+                "SC-navLink keeps the last snapshot on your computer, so prices (with their age) still show if UEX is unreachable or SC-navLink is offline.",
             ]),
 
         new("dock:settings", "Settings",
-            "One module for everything Nexus needs configured - file paths, identity, diagnostics, motion, and data.",
+            "One module for everything SC-navLink needs configured - file paths, identity, diagnostics, motion, and data.",
             [new("Settings", "app dock, bottom")],
             [
                 "Click the Settings module at the bottom of the app dock to open it.",
                 "Game.log Paths - set your Game.log location (used by Session Tracking, Cargo Hauling, and server / shard tracking) and an optional global.ini path that translates blueprint names renamed by a localization mod. Open Game.log Monitor lives here too.",
                 "Blueprint Network - detect your RSI handle (read-only, from Game.log) so library exports come pre-filled.",
-                "Diagnostics - the App Log Monitor shows Nexus's own activity live, and a snapshot bundles app info and the log into one file to attach to a bug report.",
+                "Diagnostics - the App Log Monitor shows SC-navLink's own activity live, and a snapshot bundles app info and the log into one file to attach to a bug report.",
                 "Appearance - Reduce animations tones down motion across the app; 24-hour clock switches the top-bar clock format.",
                 "Data - Clear saved data wipes your owned blueprints, Blueprint Network members and groups, detected RSI handle, shopping cart, work orders and pinned resources after a confirmation; the mining reference data is left untouched.",
             ]),
 
         new("◐", "Appearance",
-            "Tune how Nexus moves and reads - motion and clock options live in Settings.",
+            "Tune how SC-navLink moves and reads - motion and clock options live in Settings.",
             [new("Settings", "› Appearance")],
             [
                 "Turn on Reduce animations in Settings › Appearance to minimize motion across the app.",
@@ -228,7 +228,7 @@ public class HelpDialog : Window
             ]),
 
         new("dock:cargo", "Cargo Hauling",
-            "Nexus reads the hauling contracts you accept from Game.log and builds a consolidated collect-and-deliver plan across every active haul.",
+            "SC-navLink reads the hauling contracts you accept from Game.log and builds a consolidated collect-and-deliver plan across every active haul.",
             [new("Auto-scan contracts", "switch"), new("⊕", "set contract region")],
             [
                 "Open the Cargo Hauling module in the app dock - contracts you accept in game appear automatically, no manual entry.",
@@ -246,7 +246,7 @@ public class HelpDialog : Window
             "The landing dashboard - your whole operation at a glance, with jump-off links into every module.",
             [new("LIVE / OFFLINE", "game link")],
             [
-                "Operations opens by default when Nexus starts - it's the first module in the app dock.",
+                "Operations opens by default when SC-navLink starts - it's the first module in the app dock.",
                 "KPI cards along the top give an at-a-glance readout: last RS scan, refinery queue, cargo in transit, session blueprints, and network coverage.",
                 "The REFINERY QUEUE and ACTIVE HAULS panels link straight into their modules with Open tracker and Open hauling.",
                 "NETWORK RISK flags blueprints only one person in your Blueprint Network owns.",
@@ -297,7 +297,7 @@ public class HelpDialog : Window
 
     public HelpDialog()
     {
-        Title = "Help - Nexus";
+        Title = "Help - SC-navLink";
         Width = 880; Height = 600; MinWidth = 720; MinHeight = 480;
         Background = R("BgBrush");
         Foreground = R("FgBrush");

@@ -431,7 +431,7 @@ public sealed partial class CommandPage : UserControl
         }
 
         return NoticeStrip("AUTOMATIC RESTART",
-            "Nexus restarted itself after Windows reported a display error. Your work was not " +
+            "SC-navLink restarted itself after Windows reported a display error. Your work was not " +
             "affected. If this keeps happening, enable CPU rendering in Settings > Diagnostics.",
             Array.Empty<Button>(), DismissRelaunchStrip);
     }
@@ -577,7 +577,7 @@ public sealed partial class CommandPage : UserControl
             (Application.Current.MainWindow as MainWindow)?.OpenSettingsGameTab();
         };
         return NoticeStrip("GAME LOG",
-            "Nexus is reading a Game.log in a custom folder. Blueprint recording is off by default " +
+            "SC-navLink is reading a Game.log in a custom folder. Blueprint recording is off by default " +
             "for non-standard installs. If this is your real LIVE install, allow it in Settings > Game.",
             new[] { open }, onDismiss: () =>
             {

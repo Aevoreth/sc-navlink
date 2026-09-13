@@ -45,7 +45,7 @@ public sealed class NetworkPage : UserControl
     {
         _store = store;
         _settings = settings;
-        _files.AppLabel = $"NexusApp {AppInfo.Version}";
+        _files.AppLabel = $"{AppIdentity.ProductName} {AppInfo.Version}";
         Build();
     }
 

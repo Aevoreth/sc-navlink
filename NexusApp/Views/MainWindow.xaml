@@ -5,7 +5,7 @@
         xmlns:conv="clr-namespace:NexusApp.Converters"
         xmlns:models="clr-namespace:NexusApp.Models"
         xmlns:views="clr-namespace:NexusApp.Views"
-        Title="Nexus" Icon="/Assets/nexus_icon_classic.png" Height="820" Width="1280"
+        Title="SC-navLink" Icon="/Assets/sc-navlink_icon.png" Height="820" Width="1280"
         MinHeight="600" MinWidth="900"
         Background="{DynamicResource BgBrush}"
         Foreground="{DynamicResource FgBrush}"
@@ -54,11 +54,11 @@
                     </LinearGradientBrush>
                 </Border.OpacityMask>
             <StackPanel x:Name="ChipStrip" Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,0" SizeChanged="ChipStrip_SizeChanged">
-                <views:NexusBeamIcon Width="28" Height="28" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                <views:NavLinkMark Width="28" Height="28" Margin="0,0,8,0" VerticalAlignment="Center"/>
                 <StackPanel Margin="0,0,12,0" VerticalAlignment="Center">
                     <TextBlock FontFamily="{StaticResource DisplayFont}" FontSize="18" FontWeight="Bold"
                                Foreground="{StaticResource FgBrush}" VerticalAlignment="Center">
-                        <Run Text="NE"/><Run Text="X" Foreground="{StaticResource AccentBrush}"/><Run Text="US"/>
+                        <Run Text="SC-"/><Run Text="nav" Foreground="{StaticResource AccentBrush}"/><Run Text="Link"/>
                         <TextBlock.Effect>
                             <DropShadowEffect Color="{DynamicResource AccentColor}" BlurRadius="9" ShadowDepth="0" Opacity="0.3"/>
                         </TextBlock.Effect>

@@ -35,9 +35,7 @@ public sealed class AutoLoadTracker : IDisposable
         _store = store ?? new AutoLoadSampleStore();
         _utcNow = utcNow ?? (() => DateTime.UtcNow);
         _table = table ?? AutoLoadTimeTable.Instance;
-        _activePath = activePath ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "NexusApp", "autoload_active.json");
+        _activePath = activePath ?? Path.Combine(AppPaths.Root, "autoload_active.json");
         _profit.TransactionParsed += Apply;
         _profit.LogWasReset += Reset;
 

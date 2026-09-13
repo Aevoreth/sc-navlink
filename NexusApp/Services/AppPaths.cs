@@ -2,17 +2,18 @@ using System.IO;
 
 namespace NexusApp.Services;
 
-// Resolves the per-profile data root once per process. A normal launch uses %AppData%\NexusApp.
-// A launch carrying --demo-profile uses %AppData%\NexusApp_demo instead: a fully separate,
-// disposable profile seeded from the embedded StarlightHauler demo dataset, so public
-// screenshots can be taken without the live profile ever being read or written.
+// Resolves the per-profile data root once per process. A normal launch uses
+// %AppData%\sc-navlink. A launch carrying --demo-profile uses
+// %AppData%\sc-navlink_demo instead: a fully separate, disposable profile seeded
+// from the embedded StarlightHauler demo dataset, so public screenshots can be
+// taken without the live profile ever being read or written.
 public static class AppPaths
 {
     public const string DemoArg = "--demo-profile";
 
     // Pure core, testable headless: args plus the AppData folder in, profile root out.
     public static string ResolveRoot(string[] args, string appDataDir) =>
-        Path.Combine(appDataDir, args.Contains(DemoArg) ? "NexusApp_demo" : "NexusApp");
+        Path.Combine(appDataDir, args.Contains(DemoArg) ? AppIdentity.AppDataFolderDemo : AppIdentity.AppDataFolder);
 
     public static bool IsDemoProfile { get; } =
         Environment.GetCommandLineArgs().Contains(DemoArg);

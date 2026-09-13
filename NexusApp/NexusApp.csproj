@@ -5,21 +5,21 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
-    <AssemblyName>NexusApp</AssemblyName>
+    <AssemblyName>SC-navLink</AssemblyName>
     <RootNamespace>NexusApp</RootNamespace>
     <!-- Authorship metadata, embedded in the built exe (Properties > Details). -->
     <Authors>T3SoD</Authors>
     <Company>T3SoD</Company>
-    <Product>Nexus</Product>
+    <Product>SC-navLink</Product>
     <Copyright>Copyright (c) 2026 T3SoD</Copyright>
-    <Description>Nexus - Star Citizen mining assistant by T3SoD. github.com/T3SoD/NexusApp</Description>
+    <Description>SC-navLink - Star Citizen operations companion, derived from Nexus by T3SoD. github.com/Aevoreth/sc-navlink</Description>
     <!-- SINGLE SOURCE OF TRUTH for the app version. The in-app badges read this
          at runtime and the installer reads it from the built exe. For a release,
          CI overrides it from the git tag (dotnet publish -p:Version=X.Y.Z). -->
     <Version>6.14.6</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <ApplicationIcon>Assets\nexus.ico</ApplicationIcon>
-    <!-- Per-Monitor-DPI-Aware V2 (issue #6): makes PointToScreen + GDI capture use true
+    <ApplicationIcon>Assets\sc-navlink.ico</ApplicationIcon>
+    <!-- Per-Monitor-DPI-Aware V2: makes PointToScreen + GDI capture use true
          per-monitor physical pixels so scan capture works on a different-DPI monitor. -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
 <SelfContained>true</SelfContained>
@@ -116,9 +116,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Resource Include="Assets\nexus_icon_classic.png" />
-    <Resource Include="Assets\nexus_logo_classic.png" />
-    <Resource Include="Assets\nexus.ico" />
+    <Resource Include="Assets\sc-navlink_icon.png" />
+    <Resource Include="Assets\sc-navlink_logo.png" />
+    <Resource Include="Assets\sc-navlink.ico" />
     <Resource Include="Assets\RS_Signature.png" />
     <!-- Mission Guides artwork. Embedded, never loose in the portable output.
          Adding a guide = drop the PNG here and add one GuideCatalog entry. -->

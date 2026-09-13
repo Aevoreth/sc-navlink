@@ -54,7 +54,7 @@ public class UpdateNoticeTests
     [InlineData("Installing")]
     [InlineData("ManualHandoff")]
     public void StatusLine_AvailableStates_NameTheVersion(string state) =>
-        Assert.Equal("Nexus 9.9.9 is available", UpdateNotice.StatusLine(state, new Version(9, 9, 9), null, false));
+        Assert.Equal("SC-navLink 9.9.9 is available", UpdateNotice.StatusLine(state, new Version(9, 9, 9), null, false));
 
     [Fact]
     public void StatusLine_Idle_FallsBackToLastChecked() =>
@@ -92,7 +92,7 @@ public class UpdateNoticeTests
 
     [Fact]
     public void DownloadingBody_RoundsToWholeMegabytes() =>
-        Assert.Equal("Downloading Nexus 6.7.0. 5 of 100 MB.", UpdateNotice.DownloadingBody(new Version(6, 7, 0), 5 * 1048576, 100 * 1048576));
+        Assert.Equal("Downloading SC-navLink 6.7.0. 5 of 100 MB.", UpdateNotice.DownloadingBody(new Version(6, 7, 0), 5 * 1048576, 100 * 1048576));
 
     [Fact]
     public void SettingsRoundTrip_NewPropertiesPersistAndDefaultNull()
@@ -125,21 +125,21 @@ public class UpdateNoticeTests
     [Fact]
     public void PortableSwapBodies_PinExactCopy()
     {
-        Assert.Equal("Nexus will close for a moment and reopen as the new version. Your settings, work orders, and blueprints are kept.",
+        Assert.Equal("SC-navLink will close for a moment and reopen as the new version. Your settings, work orders, and blueprints are kept.",
             UpdateNotice.InstallConfirmBodyPortable);
-        Assert.Equal("Preparing Nexus 6.9.0. Nexus will close and reopen in a moment.",
+        Assert.Equal("Preparing SC-navLink 6.9.0. SC-navLink will close and reopen in a moment.",
             UpdateNotice.PreparingBody(new Version(6, 9, 0)));
-        Assert.Equal("Nexus 6.9.0 is downloaded and verified. Nexus cannot replace its own files from this location, so this update finishes with one quick copy.",
+        Assert.Equal("SC-navLink 6.9.0 is downloaded and verified. SC-navLink cannot replace its own files from this location, so this update finishes with one quick copy.",
             UpdateNotice.ReadyBodyPortableManual(new Version(6, 9, 0)));
-        Assert.Equal("Unpacking Nexus 6.9.0.",
+        Assert.Equal("Unpacking SC-navLink 6.9.0.",
             UpdateNotice.UnpackingBody(new Version(6, 9, 0)));
-        Assert.Equal("Two folders are open: the new Nexus 6.9.0 and your current Nexus. Close Nexus, then copy everything from the new folder into the current one, replacing files when asked.",
+        Assert.Equal("Two folders are open: the new SC-navLink 6.9.0 and your current SC-navLink. Close SC-navLink, then copy everything from the new folder into the current one, replacing files when asked.",
             UpdateNotice.ManualHandoffBody(new Version(6, 9, 0)));
         Assert.Equal("Couldn't prepare the update. Nothing was changed. Try again, or update manually from Settings > Updates.",
             UpdateNotice.PrepareFailedBody);
-        Assert.Equal("The update could not finish. Nexus will finish restoring the previous version the next time it starts. Close Nexus and start it again.",
+        Assert.Equal("The update could not finish. SC-navLink will finish restoring the previous version the next time it starts. Close SC-navLink and start it again.",
             UpdateNotice.RestorePendingBody);
-        Assert.Equal("The update to Nexus 6.9.0 could not finish. Nexus restored the previous version and nothing changed. You are still on Nexus 6.8.1.",
+        Assert.Equal("The update to SC-navLink 6.9.0 could not finish. SC-navLink restored the previous version and nothing changed. You are still on SC-navLink 6.8.1.",
             UpdateNotice.SwapFailedBody("6.9.0", "6.8.1"));
     }
 }

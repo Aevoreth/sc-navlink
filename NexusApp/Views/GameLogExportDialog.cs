@@ -178,7 +178,7 @@ public sealed class GameLogExportDialog : Window
             File.WriteAllText(dlg.FileName, result.Text);
             _status.Text = $"Saved {result.LinesKept} lines from {result.FilesWithContent} of "
                          + $"{result.FilesScanned} session files to {dlg.FileName}. "
-                         + "Attach it to your issue at github.com/T3SoD/NexusApp/issues.";
+                         + "Attach it to your issue at " + AppIdentity.IssuesHostPath + ".";
             Logger.Info($"[UI] Game.log exported: {result.LinesKept}/{result.LinesTotal} lines from "
                       + $"{result.FilesWithContent}/{result.FilesScanned} session files, "
                       + $"personal details {(scrub ? "removed" : "kept")}");

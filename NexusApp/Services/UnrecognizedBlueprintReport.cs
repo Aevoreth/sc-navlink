@@ -66,7 +66,7 @@ public static class UnrecognizedBlueprintReport
         string? localizationOrigin = null)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"Nexus v{appVersion}  ·  Mining data v{miningDataVersion}  ·  {timestamp:yyyy-MM-dd HH:mm}");
+        sb.AppendLine($"SC-navLink v{appVersion}  ·  Mining data v{miningDataVersion}  ·  {timestamp:yyyy-MM-dd HH:mm}");
         sb.AppendLine($"Star Citizen build: {(string.IsNullOrWhiteSpace(buildLine) ? "unknown" : buildLine)}");
         sb.AppendLine($"Scanned {filesScanned} log file(s) - matched {matchedCount}, unrecognized {unmatchedLines.Count}");
         sb.AppendLine($"StarStrings mod: {(starStringsDetected ? "detected" : "not detected")}");

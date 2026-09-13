@@ -1,18 +1,19 @@
 # Architecture
 
-This document is a high-level map of how NexusApp is built. For the security
+This document is a high-level map of how SC-navLink is built. The code
+project folder is still `NexusApp`. For the security
 boundary (network access, file access, and game-process access), see
 [SECURITY.md](SECURITY.md).
 
 ## Overview
 
-NexusApp is a single-process **WPF desktop app** that targets **.NET 10**
-(`net10.0-windows`). The build publishes NexusApp self-contained for `win-x64`.
-NexusApp uses the **MVVM** pattern with `CommunityToolkit.Mvvm`. A thin services
+SC-navLink is a single-process **WPF desktop app** that targets **.NET 10**
+(`net10.0-windows`). The build publishes SC-navLink self-contained for `win-x64`.
+The app uses the **MVVM** pattern with `CommunityToolkit.Mvvm`. A thin services
 layer sits under the UI.
 
 All data is local. The build bundles the reference data. The user data is on
-disk in the per-user app-data folder. Two subsystems are opt-in and touch the
+disk in `%AppData%\sc-navlink`. Two subsystems are opt-in and touch the
 network: the update check and the live market data fetch. Nothing else in the
 app makes a network call.
 
@@ -54,7 +55,7 @@ app makes a network call.
 
 ### Views (`Views/`, `MainWindow.xaml`, `OverlayWindow.xaml`)
 The Views are the WPF windows and dialogs. The two main surfaces are
-**MainWindow** and **OverlayWindow**. **MainWindow** is the full NexusApp.
+**MainWindow** and **OverlayWindow**. **MainWindow** is the full SC-navLink desktop.
 **OverlayWindow** is a compact panel. **OverlayWindow** stays always-on-top and
 floats over the game.
 
@@ -66,7 +67,7 @@ browser. It reads `IMarketCatalog`. It does not call UEX HTTP. Planner and
 Sell load stay on `MarketSnapshot`.
 
 **OverlayWindow** shows the same tabs in a compact strip, `OverlayTabStrip`,
-where the active tab expands into an amber pill and the rest show only their
+where the active tab expands into a cyan pill and the rest show only their
 icon. Ghost mode replaces this strip with `OverlayGhostRail`, a narrow
 vertical icon rail with a per-tab flyout, for a smaller footprint over the
 game.
@@ -128,7 +129,7 @@ The view model controls these services. Each service holds little or no state.
   `MarketDataService` runs the hourly fetch cycle. `UexMarketProvider` calls
   the UEX API 2.0 (https://uexcorp.space/api). It returns normalized catalog
   rows, not UEX DTOs. `ProviderCacheStore` keeps those rows in
-  `%AppData%\NexusApp\cache\provider_cache.db`. A successful payload updates a
+  `%AppData%\sc-navlink\cache\provider_cache.db`. A successful payload updates a
   row only when UEX `date_modified` is newer. An omitted id stays in SQLite.
   Cadence is a fetch throttle. Cached rows do not expire.
   `FetchedUtc` is the last UEX call. `ObservedUtc` is the community report age.
@@ -234,7 +235,7 @@ types.
   and `scripts/protect_update_key.ps1` is the one-time step that locks the
   private key behind that passphrase. In the app, `UpdateVerifier` holds the
   pinned public key, the hash checks, and the strictly-greater version rule. It
-  gates `UpdateService`. Downloads land in `%AppData%\NexusApp\updates`. NexusApp
+  gates `UpdateService`. Downloads land in `%AppData%\sc-navlink\updates`. NexusApp
   checks their hash before the installer ever runs. The installer flavor runs the
   verified installer file. The portable flavor can install the update itself,
   without a helper program and without a script. See Portable self-update below.
@@ -243,7 +244,7 @@ types.
   the user's standing choice). When enabled, `MarketDataService` fetches prices
   from the UEX community API about once an hour while NexusApp is open. This
   fetch is the only other network code in the app besides the update check.
-  Rows persist in `%AppData%\NexusApp\cache\provider_cache.db`. A leftover
+  Rows persist in `%AppData%\sc-navlink\cache\provider_cache.db`. A leftover
   `uex_snapshot.json` is imported one time when that cache is empty. NexusApp
   can serve last-known-good prices when UEX is offline. Cadence is a fetch
   throttle. Cached rows do not expire. The bundled mining seed is not fetched.
