@@ -266,3 +266,99 @@ Use this file to record the reasons for high-impact accepted decisions.
 A durable rule change must update its canonical document.
 
 A decision entry records history but does not override the current canonical rule.
+
+## D-012: Treat NEXT as a continuous coordination layer
+
+**Date:** 2026-09-14  
+**Status:** Accepted
+
+### Context
+
+The original roadmap described `NEXT` mainly as a later 0.5 milestone. The foundation now already contains a UI-agnostic recommendation contract and initial deterministic hauling logic, while future Ships, cargo, route, trade, mining, refinery, and goal work all need to contribute to the same recommendation surface.
+
+### Decision
+
+Treat `NEXT` as a coordination layer that grows throughout the roadmap rather than as a feature that appears only in one late milestone.
+
+Expose useful deterministic `NEXT` output in Operations and the overlay as soon as the required state exists.
+
+Later phases add candidate action types and better scoring while preserving the presentation contract where practical.
+
+### Consequences
+
+0.2 includes the first visible operational `NEXT` experience.
+
+0.5 becomes a cross-domain intelligence/refinement milestone rather than the first appearance of `NEXT`.
+
+## D-013: Move Ships foundation before advanced route intelligence
+
+**Date:** 2026-09-14  
+**Status:** Accepted
+
+### Context
+
+Hauling, trade, cargo planning, and route optimization need an active ship and usable cargo capacity. The existing application does not yet have a complete canonical user-facing source for those facts.
+
+### Decision
+
+Introduce the initial **Ships** module during the Operations & Route Core phase.
+
+The initial module includes Ship Browser and My Hangar, with active-ship selection and usable-capacity state. The Loadout Calculator belongs in the module design but can mature later.
+
+### Consequences
+
+Ships is not merely a late reference feature.
+
+My Hangar becomes the primary user-facing source for confirmed active ship/capacity until later observation sources such as ASOP Vision can supplement it.
+
+## D-014: Separate cargo obligations, cargo state, cargo placement, and share one RoutePlan
+
+**Date:** 2026-09-14  
+**Status:** Accepted
+
+### Context
+
+A hauling contract can say what must be transported without proving that the cargo is physically aboard. Separately, a cargo-grid layout is a plan for placement, not evidence of inventory. Hauling and Trade also need to cooperate on one ordered trip rather than maintain independent route copies.
+
+### Decision
+
+Keep three cargo concepts distinct:
+
+1. contract/objective obligations;
+2. confirmed or inferred carried cargo;
+3. cargo placement/load plan.
+
+Introduce one shared ordered `RoutePlan` for the current operation. Hauling, Trade, Operations, Starmap, `NEXT`, and the overlay consume that shared route instead of owning incompatible copies.
+
+### Consequences
+
+Cargo provenance/correction becomes part of the domain model.
+
+Multi-stop routes can mix contract and trade actions while remaining explainable.
+
+Starmap is a visualization of route truth, not a second route planner.
+
+## D-015: Build one NavLink Vision platform for future screen readers
+
+**Date:** 2026-09-14  
+**Status:** Accepted
+
+### Context
+
+Planned commodity-terminal, refinery, ASOP, and mining features all need screen capture, regions of interest, OCR preprocessing, confidence handling, fixtures, and debugging. Independent OCR stacks would duplicate difficult infrastructure and make regressions harder to test.
+
+### Decision
+
+Create one reusable **NavLink Vision** foundation before adding substantial new screen-specific OCR pipelines.
+
+The common layer should provide capture, ROI handling, preprocessing, OCR/layout utilities, confidence/validation support, fixture replay, and development annotation/debug tooling.
+
+Domain readers remain responsible for interpreting specific screens and fields.
+
+### Consequences
+
+Commodity-terminal Vision is the preferred first major consumer because it exercises row recognition, canonical matching, confidence review, and local cache updates.
+
+Refinery and ASOP readers should reuse the common platform.
+
+The existing RS Decoder can receive contained improvements without waiting for the full Vision platform, but future expansion should avoid creating a second incompatible framework.
