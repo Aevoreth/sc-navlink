@@ -30,7 +30,7 @@ app makes a network call.
 |  Services                                                 |
 |  Data | Ocr | Scanner | Settings | Theme |                |
 |  GameLogFeed -> Session / Hauling / Shard | Importer |    |
-|  Hauling(HaulTracker/Parser/Contract/Shard) |             |
+|  Hauling(HaulTracker/Parser/Contract/Shard) | NextPlanner |
 |  Network(File/Store/Scope) |                              |
 |  Update(Service/Verifier/Manifest/Notice) |               |
 |  Market(DataService/Catalog/Cache/UexProvider/Snapshot/Queries) |    |
@@ -111,6 +111,11 @@ The view model controls these services. Each service holds little or no state.
 - **Hauling (HaulTracker / HaulLogParser / ContractOcrService / ContractScanner /
   ShardTracker / ShardLogParser / ContractCapCatalog)** - the cargo-hauling
   subsystem (see below). It reads `Game.log` read-only.
+- **NextPlanner** - the first `NEXT` recommendation model. It is independent of
+  WPF. It reads current location and known hauling stops. It returns an ordered
+  list of next actions with an explanation, a score, and a confidence. It does
+  not call a provider. It does not use an AI model. Later trade, mining,
+  refinery, and blueprint actions can use the same `NextAction` contract.
 - **Network (NetworkFileService / NetworkStore / NetworkScope)** - the
   file-exchange subsystem for the offline Blueprint Network (see below).
 - **Update (UpdateService / UpdateVerifier / UpdateManifest / UpdateNotice)** -
