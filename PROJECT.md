@@ -6,36 +6,176 @@ This document defines the product boundary, core project rules, terminology, and
 
 SC-navLink is a native Windows, local-first operations companion for Star Citizen.
 
-It combines live game state, cached community data, OCR-assisted observations, and deterministic planning in one coherent workflow.
+It combines live game state, cached community/reference data, OCR-assisted observations, and deterministic planning in one coherent workflow.
 
 The core product question is:
 
 > **Given my current operation and the best available data, what is the best next action?**
 
-SC-navLink must help answer this question without forcing the player to coordinate many unrelated tools.
+SC-navLink should reduce the need to coordinate separate hauling, trading, mining, refinery, cargo, blueprint, ship, and routing tools manually.
 
 ## Current phase
 
-SC-navLink is in the **0.1 Foundation** phase.
+SC-navLink is completing the **0.1 Foundation** phase and preparing the **0.2 Operations & Route Core** phase.
 
-The `foundation/0.1` branch is the integration branch for this phase.
+The `foundation/0.1` branch remains the integration branch until the foundation is formally closed out.
 
-GitHub issues define current task status and acceptance criteria. This document defines product intent and long-lived project rules.
+GitHub issues define current task status and acceptance criteria. `docs/ROADMAP.md` defines milestone sequencing. This document defines product intent and long-lived project rules.
 
-The next architecture task is Issue #7, which defines the initial NEXT model.
+The immediate planning focus after foundation closeout is to connect **Ships -> active ship/capacity -> CargoState -> RoutePlan -> NEXT -> Operations/Starmap/Overlay**.
+
+## Product model
+
+SC-navLink is best understood as three cooperating layers.
+
+### Operational truth
+
+The application maintains the best available picture of the current operation, including facts such as:
+
+- session/shard;
+- current/last-known location;
+- active ship and usable cargo capacity;
+- wallet/budget when known;
+- hauling contracts and objectives;
+- carried cargo;
+- mining observations;
+- refinery jobs;
+- blueprint/material goals;
+- operation/route state.
+
+### Planning
+
+Deterministic planners interpret operational truth and cached reference/provider data to answer questions such as:
+
+- which contract combinations fit the active ship;
+- which pickup/drop-off order is practical;
+- which commodity trade fits the planned route;
+- where a mixed cargo load should be sold;
+- whether a rock is practical to crack with the current mining setup;
+- whether a refinery/blueprint/material action should be prioritized.
+
+### Presentation
+
+The same shared operation is presented at different levels of detail:
+
+- **Operations** — mission-control summary: “Everything Live, in one place.”
+- **Starmap** — geographic/route visualization;
+- **module views** — detailed editors, browsers, and calculators;
+- **overlay** — concise immediate guidance while playing.
+
+Presentation surfaces must not become competing owners of operational truth.
+
+## Core module intent
+
+The existing and planned navigation modules have these intended roles.
+
+### Operations
+
+Operations is the high-level live dashboard for the current session.
+
+It should summarize, rather than duplicate, detailed module workflows. Its central responsibilities include:
+
+- primary `NEXT` action;
+- current and next location;
+- active ship and cargo utilization;
+- active hauling/trade route summary;
+- wallet/budget when known;
+- relevant mining/refinery/goal alerts;
+- immediate follow-up actions.
+
+### Starmap
+
+Starmap visualizes the player's current/last-known location and the shared route.
+
+It can show current-to-next legs, ordered stops, and compact from/to context, but should not maintain an independent route-plan truth.
+
+### Mission Guides
+
+Mission Guides currently provide curated graphical/location guidance.
+
+A later structured version can add prerequisites, stages, maps/screenshots, and tips for supported missions. This is useful but not on the critical planning path.
+
+### RS Decoder
+
+RS Decoder is a local screen/OCR mining-signature tool.
+
+Its OCR path should remain local. It should support multiple simultaneous scan signatures rather than collapsing a scan region to one value.
+
+Later mining work can add probable resource/node matches, confidence, crackability/value context, and goal relevance.
+
+### Refinery
+
+Refinery tracks refinery jobs and related economic context.
+
+Manual entry remains valid. Later OCR should be implemented through the shared NavLink Vision platform, not through a completely separate screen-reader stack.
+
+### Mining Codex
+
+Mining Codex is the reference/catalog surface for mineable materials and relevant characteristics.
+
+It can later incorporate crackability/value/equipment context while remaining distinct from live observations.
+
+### Blueprint Library
+
+Blueprint Library tracks known/needed blueprints and material goals.
+
+Its source data must be complete enough that goal-aware recommendations do not operate from a silently incomplete catalog.
+
+### Network
+
+Network/Blueprint Sharing is currently a blueprint-exchange workflow, not a requirement for live multi-user synchronization.
+
+Real-time crew/group synchronization can be considered later after single-user state is reliable.
+
+### Cargo Hauling
+
+Cargo Hauling manages contracts/objectives and evolves into an operational planner that understands:
+
+- ship capacity;
+- combined contracts;
+- ordered pickups/drop-offs;
+- complexity limits;
+- partial handling where required;
+- container/cargo-grid planning.
+
+Contract obligations are not the same thing as confirmed carried cargo.
+
+### Trade
+
+Trade retains three conceptual workflows:
+
+- **Planner** — multi-hop commodity/operation planning;
+- **Sell Load** — intelligent liquidation of cargo already on hand;
+- **Market** — local cached market catalog with source/freshness/availability context.
+
+Trade planning should be able to optimize around an operation that already exists rather than ignoring hauling stops and route intent.
+
+### Ships
+
+Ships is a planned core module, not merely a later reference browser.
+
+Its initial tabs are:
+
+- **Ship Browser** — ship catalog/reference, flyable/concept filtering, role filters, cargo/price/location data;
+- **My Hangar** — pledged, in-game purchased, and rented ships, including active-ship selection and rental/location state;
+- **Loadout Calculator** — component simulation and named saved loadouts, with deeper implementation allowed to land after the initial Ships foundation.
+
+The Ships module provides the canonical user-facing path for active ship and usable-capacity state.
 
 ## Product goals
 
 SC-navLink has these primary goals:
 
 - Maintain one shared picture of the current player operation.
-- Combine hauling, cargo, trading, mining, refining, blueprints, and related economic state.
-- Use cached community data without making an online service a hard dependency.
-- Give recommendations that account for current location, ship, cargo, contracts, budget, and goals.
+- Combine hauling, cargo, trading, mining, refining, blueprints, ships, and related economic state.
+- Use cached community/reference data without making an online service a hard dependency.
+- Give recommendations that account for current location, ship, cargo, contracts, budget, route, and goals.
 - Show the source, age, confidence, or inference status of data when those details affect trust.
 - Keep recommendations explainable and testable.
 - Preserve useful inherited Nexus behavior during the transition.
 - Keep the desktop application useful when external providers are unavailable.
+- Build useful manual planners/calculators before requiring OCR automation.
+- Reuse screen-understanding infrastructure across terminal, refinery, ASOP, and mining workflows.
 
 ## Primary product scope
 
@@ -43,18 +183,35 @@ The planned core product includes these areas:
 
 - live session and shard state;
 - current location and active ship state;
+- ship catalog and user hangar state;
 - usable cargo capacity and carried cargo state;
-- hauling contracts and combined pickup or delivery planning;
+- cargo-grid/container planning where reliable data exists;
+- hauling contracts and combined pickup/delivery planning;
 - commodity market and trade data;
-- route and trade planning;
-- mining observations and value context;
+- multi-stop route and trade planning;
+- mixed-load liquidation planning;
+- mining observations, crackability, and value context;
 - refinery jobs and value context;
 - blueprint and shopping-list goals;
-- OCR-assisted terminal observations;
+- OCR/computer-vision-assisted observations;
 - the `NEXT` recommendation model;
-- full desktop views and a concise game overlay.
+- Operations and Starmap presentation;
+- concise game overlay guidance.
 
 Later work can add related economic workflows when they support the same shared operation model.
+
+## Experimental / R&D scope
+
+Some ideas fit the project but are intentionally separated from the critical roadmap because they are higher-risk research tasks.
+
+Examples include:
+
+- rotatable 3D ship models when usable/legal assets exist;
+- curated ship floor plans;
+- automatic ship-interior/floor-plan reconstruction from game screen capture;
+- advanced visual scene reconstruction beyond deterministic screen-layout/OCR techniques.
+
+These features can be explored under an R&D/NavLink Labs track without blocking core Ships, cargo, route, or NEXT development.
 
 ## Explicit non-goals
 
@@ -74,7 +231,7 @@ SC-navLink does not have these goals:
 
 ## Shared state and data truth
 
-`GameState` is the planned canonical model for the current live operation.
+`GameState` is the canonical model for the current live operation as domains are migrated into it.
 
 Views must not become independent owners of live operational state.
 
@@ -98,6 +255,61 @@ A recommendation is an interpretation of known state. A recommendation is not a 
 Inferred state must remain distinguishable from confirmed state when that difference affects a player decision.
 
 External market data must not erase the last known good cache when a refresh fails.
+
+## Cargo truth model
+
+SC-navLink must not collapse three different cargo concepts into one model:
+
+1. **Cargo obligations** — contract/objective requirements.
+2. **Actual/inferred cargo state** — what is believed to be aboard the active ship.
+3. **Cargo placement plan** — where containers should be placed on a cargo grid.
+
+A contract objective is not evidence by itself that cargo is physically aboard the ship.
+
+Manual confirmation, OCR, and deterministic inference can all contribute to cargo state, but provenance must remain visible to the planning layer.
+
+## Route truth model
+
+The application should converge on one shared ordered `RoutePlan` for the current operation.
+
+A route can contain contract pickups/drop-offs, trade buys/sells, optional stops, and other operational actions.
+
+Operations, Starmap, Hauling, Trade, `NEXT`, and the overlay should consume the same route rather than maintain incompatible route copies.
+
+## NEXT policy
+
+`NEXT` is a continuous coordination layer, not a one-time milestone feature.
+
+Its domain contract should remain stable enough that new modules can contribute candidate actions without forcing presentation surfaces to be redesigned for every new gameplay domain.
+
+The first implementations use deterministic rules or scoring.
+
+Each recommendation must be explainable from its inputs, assumptions, and relevant data freshness/confidence.
+
+An AI model is not required for the core recommendation path.
+
+A later AI feature can explain or summarize deterministic results without becoming the only decision engine.
+
+## Vision / OCR policy
+
+Screen-derived features should use a shared **NavLink Vision** foundation where practical.
+
+The shared foundation can provide:
+
+- Windows capture;
+- reusable regions of interest;
+- preprocessing;
+- OCR;
+- layout/template detection;
+- confidence/validation;
+- fixture capture and replay;
+- developer annotation/debug tooling.
+
+Individual domain readers can then define what fields mean on a commodity terminal, refinery screen, ASOP terminal, or mining screen.
+
+OCR itself should remain local unless a future feature explicitly documents and asks for an external processing service.
+
+Recognized values must be reviewable when confidence is insufficient for safe automatic use.
 
 ## Architecture guardrails
 
@@ -131,16 +343,6 @@ Features inspired by those tools must use public documentation, public formats, 
 
 Public or community APIs must be accessed through their documented interfaces.
 
-## Recommendation policy
-
-The first `NEXT` implementations must use deterministic rules or scoring.
-
-Each recommendation must be explainable from its inputs, assumptions, and data freshness when those details affect the result.
-
-An AI model is not required for the core recommendation path.
-
-A later AI feature can explain or summarize deterministic results without becoming the only decision engine.
-
 ## Naming
 
 Use these names consistently:
@@ -161,6 +363,7 @@ Use each document as the source of truth for its stated area:
 - `ARCHITECTURE.md`: the architecture that the current code implements.
 - `docs/ROADMAP.md`: milestone goals and planned sequence.
 - `docs/DECISIONS.md`: accepted high-impact project decisions and their reasons.
+- `docs/CURSOR-HANDOFF.md`: development-context summary for continuing implementation in Cursor; it is supplemental and must defer to canonical documents and code when they differ.
 - GitHub issues: task status, task scope, and acceptance criteria.
 - GitHub pull requests: reviewed implementation changes and discussion.
 - Automated tests: executable expectations for implemented behavior.
@@ -186,6 +389,8 @@ Examples include:
 - a change to the shared-state model;
 - a change to provider or caching policy;
 - a change to the core recommendation model;
-- a major change to project scope.
+- a major change to project scope;
+- a change to shared route/cargo truth boundaries;
+- a decision to create a reusable cross-domain Vision platform.
 
 Update the related canonical document in the same pull request when the accepted decision changes that document.

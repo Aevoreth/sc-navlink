@@ -1,128 +1,379 @@
 # SC-navLink Roadmap
 
-SC-navLink is intended to become a native, local-first Star Citizen operations companion that combines game-log state, OCR-assisted observations, community data, and route/recommendation logic into one coherent application.
+SC-navLink is a native, local-first Star Citizen operations companion that combines game-log state, OCR-assisted observations, cached community/reference data, and deterministic planning into one coherent application.
 
-The roadmap intentionally prioritizes a useful, stable foundation before advanced OCR and recommendation features.
+The product is organized around one operational question:
 
-## 0.1 — Foundation
+> **Given my current operation and the best available data, what should I do next?**
 
-Goal: establish SC-navLink as an independent Nexus-derived project with a clean architecture and a first native market-data workflow.
+`NEXT` is therefore not a single late-stage feature. It is a coordination layer that becomes more capable as additional state, planners, and observation sources are added.
 
-Planned work:
+The roadmap favors useful, testable domain logic before automation. Manual input is acceptable when it allows a planner or calculator to become correct before OCR or inference is added.
 
-- preserve Nexus history and MIT attribution;
-- establish SC-navLink project identity, documentation, contribution policy, and release conventions;
-- verify the inherited application builds and tests cleanly before functional changes;
-- introduce a shared observable `GameState` for session/location/ship/cargo/contracts/wallet/refinery/mining/blueprint context;
-- define provider abstractions for market data, game/reference data, wiki data, and optional submissions;
-- implement a dedicated UEX client using public API documentation;
-- add SQLite-backed caching with provider-specific freshness/TTL rules;
-- expose data age and stale/offline state in the UI;
-- create the first SC-navLink-native Market catalog browser on Trade's Market tab;
-- create an initial `NEXT` model that can at least consume current location and known hauling stops;
-- retain inherited Nexus functionality during the transition wherever practical.
+## Product flow
+
+The planned core dependency chain is:
+
+```text
+SHIP CATALOG -> MY HANGAR -> ACTIVE SHIP
+                               |
+                               v
+                        USABLE CAPACITY
+                               |
+                               v
+CONTRACTS ------------->   CARGO STATE   <---- USER / TRANSACTIONS / OCR
+      |                        |
+      +-----------+------------+
+                  v
+              ROUTE PLAN
+           /      |       \
+      HAULING    TRADE    SELL LOAD
+           \      |       /
+                  v
+                 NEXT
+           /      |       \
+    OPERATIONS  STARMAP  OVERLAY
+```
+
+Screen-reading features should converge on a shared Vision foundation:
+
+```text
+                 NAVLINK VISION
+                /       |       \
+       TERMINALS     REFINERY    ASOP
+            |           |          |
+         MARKET      JOB STATE   HANGAR
+                \       |       /
+                     GAMESTATE
+                        |
+                       NEXT
+```
+
+## 0.1 — Foundation closeout
+
+Goal: finish the independent SC-navLink foundation and remove remaining ambiguity before expanding the operational model.
+
+Completed or substantially established during the foundation phase:
+
+- preserved Nexus history and MIT attribution;
+- SC-navLink project identity, documentation authority, contribution policy, and security boundary;
+- verified Windows build, test, publish, and smoke-start baseline;
+- shared `GameState` architecture for live operational domains;
+- provider abstractions and SQLite-backed UEX cache with freshness metadata and last-known-good behavior;
+- native Trade Market browser backed by normalized cached provider data;
+- initial UI-agnostic deterministic `NEXT` action contract and hauling rule set;
+- controlled rebrand work without destructive namespace churn.
+
+Remaining closeout work should include:
+
+- reconcile/close the original 0.1 architecture issues once their accepted work is confirmed on `foundation/0.1`;
+- audit Blueprint Library completeness and determine why only a subset of known blueprints is currently represented;
+- improve RS Decoder handling for multiple simultaneous scan signatures;
+- keep architecture/project documentation synchronized with the implemented foundation;
+- preserve all inherited behavior that has not yet been deliberately replaced.
 
 Exit criteria:
 
-- a clean Windows build is produced from SC-navLink;
-- inherited tests are green or any known inherited failures are explicitly documented;
-- UEX market data can be refreshed, cached, queried locally, and viewed natively;
-- the app remains usable when UEX is unavailable by falling back to cached data;
-- no new functionality depends on copying incompatible third-party source code.
+- foundation issues accurately reflect completed vs. deferred work;
+- current planning documents no longer identify already-completed tasks as the next task;
+- RS Decoder can represent multiple simultaneous signatures without collapsing them into one value;
+- blueprint/reference-data gaps are understood and tracked;
+- the foundation remains green in CI.
 
-## 0.2 — Trade & Route Planner
+## 0.2 — Operations & Route Core
 
-Goal: combine active gameplay state with market opportunities instead of functioning as a standalone trade calculator.
+Goal: make SC-navLink useful during a complete hauling/trading session by connecting ship, capacity, cargo, route, planners, and the first visible operational `NEXT` experience.
 
-Planned work:
+### Ships foundation
 
-- represent current ship, usable cargo capacity, wallet/budget, current location, carried cargo, and active hauling obligations;
-- calculate buy/sell opportunities from cached market data;
-- score routes by expected profit, ROI, profit/SCU, estimated time, required capital, stock/demand, container compatibility, and route deviation;
-- combine optional commodity trades with already-planned contract pickup/drop-off stops;
-- show why a recommendation was chosen;
-- support manual constraints such as reserve cash, max investment, excluded commodities, preferred systems, and desired risk level;
-- begin a compact overlay presentation for the next recommended stop/action.
+Add a **Ships** module with these initial tabs:
 
-## 0.3 — Terminal Vision
+- **Ship Browser** — searchable/filterable ship reference catalog;
+- **My Hangar** — user-maintained pledged, in-game purchased, and rented ships;
+- **Loadout Calculator** — reserved in the module structure but full component simulation can land later.
 
-Goal: turn commodity-terminal observations into locally useful market data and optional community submissions.
+Initial Ship Browser data should support, where reliable data is available:
 
-Planned work:
+- manufacturer, model, description, role/class, flyable/concept status;
+- cargo capacity and relevant cargo-grid metadata;
+- crew and physical/reference statistics;
+- current pledge price and pledge availability;
+- in-game purchase locations/prices;
+- rental locations/prices.
 
-- Windows screen-capture service with explicit capture scopes;
-- terminal/layout detection;
-- OCR for commodity rows, buy/sell prices, stock/demand, quantities, and related visible fields;
-- canonical matching against cached UEX/reference catalogs;
-- per-field confidence scores and validation rules;
+Concept/non-flyable ships should be hidden by default with filters to include them.
+
+My Hangar should establish canonical user-owned ship state, including:
+
+- acquisition type: pledged, purchased in-game, or rented;
+- rental expiry when applicable;
+- last known/current location when known;
+- active ship selection;
+- provenance for observed/confirmed ship/location values.
+
+The active ship and its usable cargo capacity become shared operational state consumed by hauling, trade, cargo planning, and `NEXT`.
+
+### Cargo state
+
+Introduce a canonical cargo model that deliberately separates:
+
+1. **cargo obligations** — what contracts require the player to carry/deliver;
+2. **actual/inferred cargo** — what NavLink believes is currently aboard;
+3. **cargo placement plan** — where containers should be placed on a ship grid.
+
+Cargo state must support provenance and correction because some values will initially be manual or inferred.
+
+### Shared multi-stop RoutePlan
+
+Replace single-hop planning assumptions with one ordered multi-stop route model capable of representing:
+
+- pickup stops;
+- delivery stops;
+- commodity buy/sell stops;
+- optional stops;
+- partial pickups/drop-offs;
+- route legs and current/next leg;
+- reasons/actions associated with each stop.
+
+The route is shared. Individual modules should not own conflicting route copies.
+
+### Operations
+
+Evolve **Operations — “Everything Live, in one place.”** into the mission-control view for the current session.
+
+It should summarize rather than duplicate detailed editors. Initial useful cards include:
+
+- primary `NEXT` action;
+- current location and next destination;
+- active ship and used/free cargo capacity;
+- active hauling/trade operation summary;
+- wallet/budget when known;
+- relevant refinery/mining/goal alerts;
+- route progress and immediate follow-up action.
+
+### Starmap
+
+Keep Starmap focused on geography and navigation. It should visualize the shared `RoutePlan`, including:
+
+- current/last-known location;
+- planned stops;
+- highlighted current-to-next route leg;
+- compact current/from-to/next information.
+
+Starmap should not create an independent route-planning truth.
+
+### Cargo Hauling
+
+Expand inherited hauling support toward operational planning:
+
+- reject or warn on contract combinations that exceed usable ship capacity;
+- combine contracts sharing origins/destinations;
+- order pickups/drop-offs;
+- support configurable complexity;
+- distinguish direct hauls from multi-contract/multi-stop plans;
+- support partial pickup/drop-off workflows where needed;
+- establish cargo-grid/container planning groundwork.
+
+Suggested complexity levels:
+
+- **Simple** — direct A -> B, no split stops;
+- **Moderate** — multiple compatible contracts sharing origins/destinations;
+- **Complex** — mixed pickup/drop-off routes;
+- **Advanced** — partial handling plus optional commodity trading.
+
+### Trade
+
+Retain the existing Trade organization while expanding each workflow.
+
+**Planner** should become a real multi-hop planner that can consider:
+
+- starting point and desired destinations;
+- active ship/capacity;
+- wallet/investment constraints;
+- stock/demand and data freshness;
+- container compatibility;
+- expected profit, ROI, profit/SCU, and estimated route cost/time;
+- already-planned hauling stops and route deviation.
+
+**Sell Load** should answer: **“I have this cargo; how should I liquidate it?”**
+
+It should support mixed loads and strategies such as:
+
+- maximum return;
+- fastest liquidation;
+- fewest stops;
+- best one-stop sale;
+- balanced;
+- best sale along the current route.
+
+Manual cargo entry is acceptable before automatic inventory observation exists.
+
+**Market** should retain current buy/sell/stock information and add availability/fullness presentation when provider data supports it. Qualitative provider status such as empty/low/medium/high/full can be shown even when a reliable absolute station-cap denominator is unavailable.
+
+### Initial visible NEXT
+
+Expose the already-established deterministic `NEXT` contract in Operations and the overlay during this phase.
+
+The first visible experience can remain hauling/route oriented. Later phases add more candidate action types without changing the presentation contract unnecessarily.
+
+Exit criteria:
+
+- the player can define/confirm an active ship and usable cargo capacity;
+- canonical cargo state exists independently from contract obligations;
+- one shared ordered route can contain multiple operational stops;
+- Hauling and Trade can contribute to that route;
+- Operations displays the current operation and a useful deterministic next action;
+- Starmap and overlay reflect the same route/NEXT state.
+
+## 0.3 — NavLink Vision
+
+Goal: create one reusable local screen-understanding platform instead of implementing unrelated OCR pipelines for each game screen.
+
+Planned foundation:
+
+- Windows screen capture with explicit capture scopes;
+- reusable regions of interest (ROI);
+- layout/template recognition where practical;
+- OCR preprocessing and normalization;
+- per-field confidence and validation;
+- fixture-based regression testing across resolutions/UI scales;
+- a development/helper workflow for capturing screenshots, annotating regions, recording expected values, and replaying recognition locally;
+- no network dependency for OCR itself.
+
+The first major consumer should be the **commodity terminal** because it exercises row detection, canonical matching, confidence review, and local provider-cache updates.
+
+Commodity-terminal Vision should support:
+
+- commodity rows;
+- buy/sell prices;
+- visible stock/demand/quantity/status fields;
+- canonical matching against cached provider/reference catalogs;
 - side-by-side review of uncertain values;
-- update SC-navLink's local market cache immediately from confirmed observations;
-- optional, explicit submission to UEX using its documented data-submission API;
-- never submit low-confidence/unreviewed data silently;
-- diagnostics and fixtures for OCR regressions across resolutions/UI scales.
+- immediate local cache updates after confirmation;
+- optional explicit UEX submission through documented APIs;
+- never silently submit low-confidence or unreviewed values.
 
-SC-DataRunner may inform desired behavior and workflow only; implementation remains independent and clean-room as described in `ATTRIBUTION.md` and `CONTRIBUTING.md`.
+This Vision foundation is also intended for later Refinery and ASOP readers.
 
-## 0.4 — Mining Vision
+## 0.4 — Mining & Refinery Intelligence
 
-Goal: evolve inherited RS-value recognition into a contextual mining assistant.
+Goal: turn mining/refining features into deterministic operational tools, then use NavLink Vision to reduce manual entry.
 
-Planned work:
+### Mining
 
-- improve scan-region capture and detection resilience;
-- recognize RS signature plus additional visible mining metrics where reliable;
-- identify probable resources/node counts and confidence;
-- estimate raw/refined value using cached market data;
-- surface relevant shopping-list/blueprint materials;
-- recommend whether a rock is worth investigating based on the player's goals;
-- integrate refinery bonuses/yields and expected downstream value;
-- present concise mining guidance in the overlay.
+Build a deterministic **crackability calculator** before automating its inputs.
 
-## 0.5 — NavLink NEXT
+Manual inputs can include:
 
-Goal: create the cross-module recommendation engine that answers **what should I do next?**
+- rock mass;
+- resistance;
+- instability;
+- composition;
+- active mining ship/head/modules;
+- gadgets/consumables.
 
-Inputs may include:
+Outputs should include:
 
-- current location and ship;
+- crackable / marginal / unlikely assessment;
+- useful power-margin/context calculations where supported;
+- recommended module/gadget changes;
+- value and goal context from cached market/blueprint data.
+
+Then expand mining Vision to populate reliable visible inputs automatically.
+
+The inherited RS Decoder should evolve into a contextual assistant capable of representing multiple simultaneous signatures, probable matches, and confidence.
+
+### Refinery
+
+Keep manual refinery entry available while adding OCR through the shared Vision infrastructure.
+
+Refinery recognition may identify, where reliably visible:
+
+- location/refinery;
+- work-order materials;
+- refining method;
+- yield/quantity;
+- cost;
+- completion time/state.
+
+Recognized values must be reviewable/correctable and should enter shared refinery state rather than becoming UI-only data.
+
+Exit criteria:
+
+- crackability calculations are deterministic and unit tested without OCR;
+- mining observations can contribute useful value/goal context;
+- refinery Vision reuses the common capture/ROI/fixture infrastructure;
+- recognized mining/refinery state can contribute candidates or constraints to `NEXT`.
+
+## 0.5 — Cross-domain NEXT intelligence
+
+Goal: deepen the recommendation engine after the operational state and planners are proven.
+
+Candidate inputs include:
+
+- current location and active ship;
 - usable cargo capacity;
 - wallet/reserved cash;
-- active contracts and objectives;
-- inferred/confirmed cargo state;
+- active hauling contracts/objectives;
+- confirmed/inferred carried cargo;
+- shared route plan;
 - refinery jobs;
-- current mining observations;
+- mining observations and crackability/value context;
 - blueprint/shopping-list goals;
-- cached commodity prices, stock/demand, and data age;
-- user preferences and exclusions.
+- cached commodity prices, stock/demand/status, and freshness;
+- user preferences, exclusions, and complexity/risk constraints.
 
-Outputs should be deterministic, explainable recommendations such as:
+Candidate outputs include:
 
-- next destination;
+- next destination/action;
 - contract cargo to collect/deliver;
-- optional commodity purchases that fit remaining capacity;
-- where to sell carried goods;
+- optional commodity purchase that fits remaining capacity;
+- recommended liquidation path for carried goods;
 - whether a mining target contributes to current goals;
-- whether buying a material is more efficient than mining it;
+- whether buying a required material is more efficient than mining it;
+- refinery collection/sale actions;
+- alternative route strategies;
 - expected run value and key assumptions.
 
-The first recommendation engine should use transparent rules/scoring, not an opaque AI dependency.
+Recommendations remain deterministic, explainable, and testable. AI can later summarize/explain results but must not be the only core decision engine.
 
-## 0.6 — Operations Refinement
+## 0.6 — Ships & Operations refinement
 
-Potential work after the core loop is proven:
+Goal: deepen mature workflows after the shared operational loop is stable.
 
-- refinery collection and sale optimization;
-- richer blueprint/material acquisition planning;
-- cargo-grid/container-size awareness and load ordering;
+Potential work:
+
+- full ship **Loadout Calculator** with component compatibility and performance calculations;
+- multiple named saved loadouts per owned ship;
+- ASOP-terminal Vision for ship location/status and rental timers when reliable;
+- deeper cargo-grid/container placement and load ordering;
 - earnings/run/session history;
-- configurable operation profiles (hauling, trading, mining, mixed run);
-- better stale-data/confidence visualization;
-- import/export/backup of local state;
-- additional economic gameplay support where data permits, including salvage-related planning;
-- optional local-network/mobile companion after the desktop workflow is mature.
+- operation profiles such as hauling, trading, mining, salvage, or mixed runs;
+- richer Mission Guides with structured stages, maps/screenshots, prerequisites, and tips;
+- richer blueprint/material acquisition planning;
+- import/export/backup of local user state;
+- optional crew/group/network improvements after single-user state is solid;
+- optional local-network/mobile companion after desktop workflows are mature.
+
+## R&D / NavLink Labs
+
+These ideas are valuable but must not block the critical operational roadmap:
+
+- rotatable 3D ship viewer when usable/legal model assets are available;
+- curated ship floor plans;
+- experimental game-screen-assisted ship interior reconstruction/floor-plan generation;
+- advanced visual scene understanding beyond deterministic layout/OCR techniques;
+- other experimental mapping or spatial reconstruction tools.
+
+Automated interior reconstruction is expected to be a separate research effort, not a dependency for the Ships module.
 
 ## Long-term principles
 
-The roadmap is not a promise that every possible feature belongs in SC-navLink. New work should reinforce the core experience rather than turning the application into a launcher for unrelated utilities.
-
-A feature is a particularly good fit when it can contribute to the shared game state or improve the quality of a contextual recommendation.
+- New work should strengthen shared state, planning, observation, or presentation of the current operation.
+- Do not make every module its own source of truth.
+- Build calculations/planners correctly before automating their inputs.
+- Prefer reusable Vision infrastructure over one-off OCR pipelines.
+- Keep core use local-first and useful during provider outages.
+- Preserve provenance, freshness, and confidence when they affect trust.
+- Do not automate gameplay input or cross the security boundary defined in `SECURITY.md`.
+- Treat experimental 3D/AR-style ideas as R&D until the operational core is mature.
