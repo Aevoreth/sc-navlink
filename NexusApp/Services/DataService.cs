@@ -15,6 +15,7 @@ public class DataService : IDisposable
 
     private SqliteConnection? _conn;
     private HangarStore? _hangar;
+    private CargoStore? _cargo;
     private string _seedVersion = "0.0.0";
 
     // Logs the meta-read failure at most once per process, even though MiningDataVersion is
@@ -69,6 +70,7 @@ public class DataService : IDisposable
         MigrateColumns();
         ApplySeed();
         _hangar = new HangarStore(_dbPath);
+        _cargo = new CargoStore(_dbPath);
         PublishRefineryJobs();
         PublishShoppingList();
     }
@@ -892,8 +894,192 @@ public class DataService : IDisposable
         return _hangar.Upsert(entry);
     }
 
-    public bool DeleteHangarShip(string id) =>
-        _hangar is not null && _hangar.Delete(id);
+    public bool DeleteHangarShip(string id)
+    {
+        if (_hangar is null) return false;
+        HangarEntry? row = null;
+        foreach (var item in _hangar.List())
+        {
+            if (item.Id == id)
+            {
+                row = item;
+                break;
+            }
+        }
+
+        var ok = _hangar.Delete(id);
+        if (ok && row is not null)
+            ClearCargoForShip(row.CatalogId);
+        return ok;
+    }
+
+    // ── Carried cargo ────────────────────────────────────────────────────────
+
+    public IReadOnlyList<GameCargoLot> GetCargoLots() =>
+        _cargo?.List() ?? Array.Empty<GameCargoLot>();
+
+    public IReadOnlyList<GameCargoLot> GetCargoLotsForShip(string shipId) =>
+        _cargo?.ListByShip(shipId) ?? Array.Empty<GameCargoLot>();
+
+    public GameCargoLot? SaveCargoLot(GameCargoLot draft)
+    {
+        if (_cargo is null) return null;
+        if (!CargoLots.TryNormalize(draft, out var lot)) return null;
+        _cargo.Upsert(lot);
+        PublishCargo();
+        return lot;
+    }
+
+    public bool DeleteCargoLot(string id)
+    {
+        if (_cargo is null) return false;
+        var ok = _cargo.Delete(id);
+        if (ok) PublishCargo();
+        return ok;
+    }
+
+    public void ClearCargoForShip(string shipId)
+    {
+        if (_cargo is null || string.IsNullOrWhiteSpace(shipId)) return;
+        _cargo.DeleteByShip(shipId);
+        PublishCargo();
+    }
+
+    public void AddEmptyLot(string shipId)
+    {
+        if (_cargo is null) return;
+        var ship = (shipId ?? "").Trim();
+        if (ship.Length == 0) return;
+        if (GetCargoLotsForShip(ship).Any(l => string.IsNullOrWhiteSpace(l.Commodity)))
+            return;
+
+        var draft = new GameCargoLot(
+            Guid.NewGuid().ToString("N"),
+            ship,
+            "",
+            null,
+            0,
+            null,
+            null,
+            GameCargoProvenance.UserConfirmed,
+            null,
+            DateTime.UtcNow);
+        if (!CargoLots.TryNormalize(draft, out var lot)) return;
+        _cargo.Upsert(lot);
+        PublishCargo();
+    }
+
+    public void RenameCommodity(string shipId, string from, string to)
+    {
+        if (_cargo is null) return;
+        var ship = (shipId ?? "").Trim();
+        var srcName = (from ?? "").Trim();
+        var dstName = (to ?? "").Trim();
+        if (ship.Length == 0 || CargoLots.SameCommodity(srcName, dstName)) return;
+
+        var lots = GetCargoLotsForShip(ship);
+        var src = lots.Where(l => CargoLots.SameCommodity(l.Commodity, srcName)).ToList();
+        if (src.Count == 0) return;
+        var dst = lots.Where(l => CargoLots.SameCommodity(l.Commodity, dstName)).ToList();
+        var counts = CargoLots.CountsBySize(src);
+        foreach (var (size, n) in CargoLots.CountsBySize(dst))
+            counts[size] += n;
+        var extra = CargoLots.UnspecifiedScu(src) + CargoLots.UnspecifiedScu(dst);
+        var off = CargoLots.AnyOffGrid(src) || CargoLots.AnyOffGrid(dst);
+        var contracted = CargoLots.AnyContracted(src) || CargoLots.AnyContracted(dst);
+        var destination = CargoLots.CombineDestination(src, dst);
+        _cargo.DeleteByShipCommodity(ship, srcName);
+        SetCommodityCrates(ship, dstName, counts, off, contracted, destination);
+        if (extra > 0)
+        {
+            SaveCargoLot(new GameCargoLot(
+                Guid.NewGuid().ToString("N"),
+                ship,
+                dstName,
+                null,
+                extra,
+                null,
+                null,
+                GameCargoProvenance.UserConfirmed,
+                null,
+                DateTime.UtcNow,
+                off,
+                contracted,
+                destination));
+        }
+    }
+
+    public void RemoveCommodity(string shipId, string commodity)
+    {
+        if (_cargo is null || string.IsNullOrWhiteSpace(shipId)) return;
+        _cargo.DeleteByShipCommodity(shipId.Trim(), (commodity ?? "").Trim());
+        PublishCargo();
+    }
+
+    public void SetCommodityCrates(
+        string shipId,
+        string commodity,
+        IReadOnlyDictionary<int, int> counts,
+        bool offGrid,
+        bool contracted,
+        string? destination)
+    {
+        if (_cargo is null) return;
+        var ship = (shipId ?? "").Trim();
+        var name = (commodity ?? "").Trim();
+        if (ship.Length == 0) return;
+        var dest = CargoLots.NormalizeDestination(destination);
+
+        _cargo.DeleteByShipCommodity(ship, name);
+        var now = DateTime.UtcNow;
+        var wrote = false;
+        foreach (var size in CargoCrateFit.Sizes)
+        {
+            if (!counts.TryGetValue(size, out var n) || n <= 0) continue;
+            var draft = new GameCargoLot(
+                Guid.NewGuid().ToString("N"),
+                ship,
+                name,
+                null,
+                size * n,
+                size,
+                n,
+                GameCargoProvenance.UserConfirmed,
+                null,
+                now,
+                offGrid,
+                contracted,
+                dest);
+            if (!CargoLots.TryNormalize(draft, out var lot)) continue;
+            _cargo.Upsert(lot);
+            wrote = true;
+        }
+        if (!wrote)
+        {
+            var empty = new GameCargoLot(
+                Guid.NewGuid().ToString("N"),
+                ship,
+                name,
+                null,
+                0,
+                null,
+                null,
+                GameCargoProvenance.UserConfirmed,
+                null,
+                now,
+                offGrid,
+                contracted,
+                dest);
+            if (CargoLots.TryNormalize(empty, out var lot))
+                _cargo.Upsert(lot);
+        }
+        PublishCargo();
+    }
+
+    public void PublishCargo()
+    {
+        CargoSync.Publish(GameState, GetCargoLots());
+    }
 
     private void PublishRefineryJobs()
     {
@@ -946,6 +1132,7 @@ public class DataService : IDisposable
     public void Dispose()
     {
         _hangar?.Dispose();
+        _cargo?.Dispose();
         _conn?.Dispose();
     }
 

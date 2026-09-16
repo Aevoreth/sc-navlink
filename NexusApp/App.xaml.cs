@@ -142,6 +142,12 @@ public partial class App : Application
     public static void PublishActiveShip()
     {
         ActiveShipSync.Publish(GameState, Settings.Current.ActiveShipId, Data.GetHangarShips(), Market);
+        PublishCargo();
+    }
+
+    public static void PublishCargo()
+    {
+        Data.PublishCargo();
     }
 
     // Ghost mode (issue #27): single write path so the Settings page toggle, the rail's

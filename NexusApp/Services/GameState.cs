@@ -291,6 +291,78 @@ public sealed record GameActiveShipState(
     public bool HasShip => !string.IsNullOrWhiteSpace(ShipId);
 }
 
+/// <summary>How a cargo lot was obtained. None is not a stored lot.</summary>
+public enum GameCargoProvenance { None, UserConfirmed, OcrObserved, Inferred, Transaction }
+
+/// <summary>
+/// One quantity of a commodity believed to be aboard a hangar ship.
+///
+/// This is inventory, not a contract obligation and not a cargo-grid placement.
+/// <see cref="Contracted"/> is a user flag that this lot is for a haul, not a
+/// haul card. <see cref="Destination"/> is a free-text note; it is not linked to
+/// a terminal, haul stop, or contract until a later issue.
+/// </summary>
+public sealed record GameCargoLot(
+    string Id,
+    string ShipId,
+    string Commodity,
+    int? UexCommodityId,
+    int Scu,
+    int? ContainerScu,
+    int? ContainerCount,
+    GameCargoProvenance Provenance,
+    double? Confidence,
+    DateTime ObservedUtc,
+    bool OffGrid = false,
+    bool Contracted = false,
+    string Destination = "");
+
+/// <summary>
+/// Immutable carried-cargo slice published into <see cref="GameState"/>.
+///
+/// Disk (<c>cargo_lots</c> in nexus.db) is the store of record. This snapshot is the live
+/// observation for the active hangar ship. Contract stops stay on <see cref="GameHaulingState"/>.
+/// Used and free SCU are derived from lots plus <see cref="GameActiveShipState.UsableCargoScu"/>.
+/// </summary>
+public sealed record GameCargoState(
+    string? ShipId,
+    string? DisplayName,
+    IReadOnlyList<GameCargoLot> Lots,
+    int UsedScu,
+    int? UsableScu,
+    int? FreeScu,
+    bool IsOverCapacity)
+{
+    public static GameCargoState Empty { get; } = new(
+        null, null, Array.Empty<GameCargoLot>(), 0, null, null, false);
+
+    public bool HasShip => !string.IsNullOrWhiteSpace(ShipId);
+    public bool HasLots => Lots.Count > 0;
+
+    public bool Equals(GameCargoState? other) =>
+        other is not null
+        && ShipId == other.ShipId
+        && DisplayName == other.DisplayName
+        && UsedScu == other.UsedScu
+        && UsableScu == other.UsableScu
+        && FreeScu == other.FreeScu
+        && IsOverCapacity == other.IsOverCapacity
+        && Lots.SequenceEqual(other.Lots);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(ShipId);
+        hash.Add(DisplayName);
+        hash.Add(UsedScu);
+        hash.Add(UsableScu);
+        hash.Add(FreeScu);
+        hash.Add(IsOverCapacity);
+        foreach (var lot in Lots) hash.Add(lot);
+        return hash.ToHashCode();
+    }
+}
+
 /// <summary>
 /// App-lifetime observable operational state for SC-navLink.
 ///
@@ -311,6 +383,7 @@ public sealed class GameState
     private GameRefineryState _refinery = GameRefineryState.Empty;
     private GameGoalsState _goals = GameGoalsState.Empty;
     private GameActiveShipState _activeShip = GameActiveShipState.Empty;
+    private GameCargoState _cargo = GameCargoState.Empty;
 
     /// <summary>Latest location snapshot. The returned record is immutable and safe to retain.</summary>
     public GameLocationState Location
@@ -393,6 +466,15 @@ public sealed class GameState
         }
     }
 
+    /// <summary>Latest carried-cargo snapshot. The returned record is immutable and safe to retain.</summary>
+    public GameCargoState Cargo
+    {
+        get
+        {
+            lock (_gate) return _cargo;
+        }
+    }
+
     /// <summary>Raised when any shared-state slice changes.</summary>
     public event Action? Changed;
 
@@ -422,6 +504,9 @@ public sealed class GameState
 
     /// <summary>Raised when the active-ship snapshot changes.</summary>
     public event Action? ActiveShipChanged;
+
+    /// <summary>Raised when the carried-cargo snapshot changes.</summary>
+    public event Action? CargoChanged;
 
     /// <summary>
     /// Publish the result of the location domain service. Internal so ordinary consumers cannot
@@ -461,6 +546,10 @@ public sealed class GameState
     /// <summary>Publish the hangar-confirmed active ship and usable cargo capacity.</summary>
     internal void PublishActiveShip(GameActiveShipState activeShip)
         => Publish(ref _activeShip, activeShip, () => ActiveShipChanged);
+
+    /// <summary>Publish the hangar-backed cargo believed to be aboard the active ship.</summary>
+    internal void PublishCargo(GameCargoState cargo)
+        => Publish(ref _cargo, cargo, () => CargoChanged);
 
     /// <summary>Replace the shopping list while keeping currently published owned blueprints.</summary>
     internal void PublishShopping(IReadOnlyList<GameShoppingItem> shopping)

@@ -147,6 +147,17 @@ public class ShipCatalogIdsTests
             Assert.Equal(t.TotalScu, ShipCatalogIds.UsableScu(catalog, trade));
         });
     }
+
+    [Fact]
+    public void ToCargoShip_MapsUexSlugToGridCatalog()
+    {
+        var raft = ShipCatalogIds.ToCargoShip("raft");
+        Assert.NotNull(raft);
+        Assert.Equal("argo-raft", raft!.Id);
+        var cutlass = ShipCatalogIds.ToCargoShip("cutlass-black");
+        Assert.NotNull(cutlass);
+        Assert.Equal("drak-cutlass-black", cutlass!.Id);
+    }
 }
 
 public class TradeShipSeedTests

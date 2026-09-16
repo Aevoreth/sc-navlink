@@ -34,8 +34,8 @@ public sealed class BoxType
     public static readonly IReadOnlyList<BoxType> All = new[]
     {
         new BoxType(1, 1, 1, 1),
-        new BoxType(2, 2, 1, 1),
-        new BoxType(4, 2, 2, 1),
+        new BoxType(2, 2, 1, 1),   // 2×1 footprint, 1 high; never 1×1×2 on end
+        new BoxType(4, 2, 2, 1),   // 2×2 footprint, 1 high; never stood on a side
         new BoxType(8, 2, 2, 2),
         new BoxType(16, 4, 2, 2),
         new BoxType(24, 6, 2, 2),
