@@ -391,6 +391,19 @@
                                 </Grid>
                             </RadioButton>
 
+                            <RadioButton x:Name="NavShips" Tag="ships" Style="{StaticResource DockTile}" Click="Nav_Click" Checked="Nav_Click">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                    <views:ChamferPanel Grid.Column="0" Style="{StaticResource DockChip}">
+                                        <views:AnimatedDockIcon IconKey="ships" Width="28" Height="28"/>
+                                    </views:ChamferPanel>
+                                    <StackPanel Grid.Column="1" Margin="12,0,8,0" VerticalAlignment="Center">
+                                        <TextBlock Text="Ships" Style="{StaticResource DockTileName}"/>
+                                        <TextBlock Text="HANGAR" FontFamily="{StaticResource MonoFont}" FontSize="8" Foreground="{DynamicResource FgDimBrush}" Margin="0,3,0,0"/>
+                                    </StackPanel>
+                                </Grid>
+                            </RadioButton>
+
                             <RadioButton x:Name="NavPlanner" Tag="planner" Visibility="Collapsed" Style="{StaticResource DockTile}" Click="Nav_Click" Checked="Nav_Click">
                                 <Grid>
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
@@ -551,6 +564,9 @@
 
                 <!-- ── TRADE PAGE (built in code - Views/TradePage.cs) ── -->
                 <Grid x:Name="PageTrade" Visibility="Collapsed"/>
+
+                <!-- ── SHIPS PAGE (built in code - Views/ShipsPage.cs) ── -->
+                <Grid x:Name="PageShips" Visibility="Collapsed"/>
 
                 <!-- ── STARMAP PAGE (built in code - Views/MapPage.cs) ── -->
                 <Grid x:Name="PageMap" Visibility="Collapsed"/>

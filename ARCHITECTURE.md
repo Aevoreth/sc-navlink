@@ -35,7 +35,7 @@ app makes a network call.
 |  Network(File/Store/Scope) |                              |
 |  Update(Service/Verifier/Manifest/Notice) |               |
 |  Market(DataService/Catalog/Cache/UexProvider/Snapshot/Queries) |    |
-|  Guides(Catalog) | ExecHangarCycle |                      |
+|  Ships(IShipCatalog/HangarStore/ShipImageCache) | Guides | ExecHangar |    |
 |  Overlay(Tabs/GhostGeometry/GhostFootprints) |            |
 |  ScmdbImport(Parser/Plan) |                               |
 |  UiScaleService |                                         |
@@ -48,6 +48,7 @@ app makes a network call.
 |  Storage:  embedded seed_data.json  +  SQLite  +  JSON    |
 |            settings  +  local network.db (Blueprint Net)  |
 |            +  cache/provider_cache.db (UEX market cache)  |
+|            +  cache/ship_images (on-demand previews)      |
 +-----------------------------------------------------------+
 ```
 
@@ -59,12 +60,20 @@ The Views are the WPF windows and dialogs. The two main surfaces are
 **OverlayWindow** is a compact panel. **OverlayWindow** stays always-on-top and
 floats over the game.
 
-**MainWindow** shows one dock page at a time. `GuidesPage` is the Mission
-Guides dock page: a category-grouped card grid over the shared `GuideCatalog`.
-Clicking a card hands the page over to `GuideViewer`, a zoom-and-pan image
-view shared with the overlay. Trade's Market sub-tab is the native catalog
-browser. It reads `IMarketCatalog`. It does not call UEX HTTP. Planner and
-Sell load stay on `MarketSnapshot`.
+**MainWindow** shows one dock page at a time. Ships is a first-class dock page
+with Browser, My Hangar, and a Loadout skeleton. Click a Browser card or a
+Hangar ship name to open a hull detail pane. The pane shows a wiki intro,
+specs, a store link, and cached buy or rent prices.
+
+Manufacturer chips and role chips filter the Browser. My Hangar lets you set
+pledged, purchased, or rented, plus location and rental expiry. Named
+loadouts stay off the hangar row until the Loadout Calculator exists.
+
+`GuidesPage` is the Mission Guides dock page: a category-grouped card grid over
+the shared `GuideCatalog`. Clicking a card hands the page over to
+`GuideViewer`, a zoom-and-pan image view shared with the overlay. Trade's
+Market sub-tab is the native catalog browser. It reads `IMarketCatalog`. It
+does not call UEX HTTP. Planner and Sell load stay on `MarketSnapshot`.
 
 **OverlayWindow** shows the same tabs in a compact strip, `OverlayTabStrip`,
 where the active tab expands into a cyan pill and the rest show only their
@@ -106,19 +115,23 @@ The current slices are:
 - mining scan
 - refinery jobs
 - durable goals (shopping list and owned blueprints)
+- active ship and usable cargo capacity
 
 `PublishX` methods are internal. Ordinary UI code cannot mutate a slice. A
 publish replaces one snapshot. Identical evidence is not a transition. Events
 fire outside the state lock: `Changed`, and one event per slice.
 
 `GameState` is not a settings store. It is not the UEX market catalog. It is
-not an active-ship record. It is not a cargo inventory.
+not the hangar list. It is not a cargo inventory.
 
 The hauling slice holds contract stops. Those stops do not prove that cargo is
-on the ship. Active ship and cargo inventory belong to later work.
+on the ship. My Hangar plus `AppSettings.ActiveShipId` are the store of record
+for the confirmed ship. `GameState` publishes the live snapshot. Cargo
+inventory belongs to later work.
 
 `App.GameState` is the one instance. `PlayerPlace` reads location from it.
-`NextPlanner` reads location and hauling stops from it.
+`NextPlanner` reads location and hauling stops from it. The Ships module
+publishes the active ship into it.
 
 ### Services (`Services/`)
 The view model controls these services. Each service holds little or no state.
@@ -126,7 +139,9 @@ The view model controls these services. Each service holds little or no state.
 - **GameState** - the shared live-operation store. See the GameState section.
   Trackers publish snapshots. Consumers observe those snapshots.
 - **DataService** - loads the reference data (resources and blueprints). It
-  saves the user data with SQLite and JSON.
+  saves the user data with SQLite and JSON. My Hangar rows live in `hangar_ships`
+  inside `nexus.db`. Each row stores acquisition, optional rental expiry, and
+  last-known location.
 - **OcrService** - captures a screen region. It runs Windows OCR, the native OCR
   engine. It prepares the image (invert, contrast, and upscale). It reads the RS
   values from the recognized text. A scan region can yield more than one
@@ -175,11 +190,25 @@ The view model controls these services. Each service holds little or no state.
   catalog. Concurrent refreshes share one in-flight cycle.
   A failed refresh must keep last-known-good rows. A leftover
   `uex_snapshot.json` is imported one time when the cache is empty.
-  `MarketDataService` and `UpdateService` are the only two places in the app
-  that touch the network. `MarketNameMap` links seed resource names to UEX
-  commodity names. `MarketQueries` is the pure read layer over `MarketSnapshot`.
+  The same cycle also fetches UEX `/vehicles`, `/vehicles_purchases_prices_all`,
+  and `/vehicles_rentals_prices_all` on a 12 hour clock. `IShipCatalog` is the
+  read API for those rows. The Ships page never calls UEX HTTP.
+  `MarketDataService`, `UpdateService`, and `ShipImageCache` are the only
+  places in the app that touch the network. `MarketNameMap` links seed resource
+  names to UEX commodity names. `MarketQueries` is the pure read layer over
+  `MarketSnapshot`.
   Consent is a tri-state setting, `MarketDataEnabled` (null = unanswered,
   true/false = the user's standing choice). The toggle sits in Settings UPDATES.
+- **ShipImageCache** - on-demand HTTPS fetch while Ships is open. It allowlists
+  RSI, UEX, and starcitizen.tools, requires HTTPS, and caps each response at
+  2 MiB. Preview files go under `%AppData%\sc-navlink\cache\ship_images`. A
+  hull detail pane may GET a MediaWiki intro extract and store it under
+  `ship_images/blurbs`. Missing images become placeholders, a missing extract
+  is omitted, and cached files still show offline.
+- **ShipDetailCopy** - UI-free hull detail copy. It formats specs, buy
+  listings, rent listings, and the store URL. The store URL must pass the same
+  HTTPS host allowlist as `ShipImageCache`. The Ships page reads this. It does
+  not format those facts inline.
 - **GuideCatalog** - the single source of truth for the Mission Guides feature.
   Each entry is one curated guide image: an id, a title, a category, an
   embedded PNG resource, and its native pixel size. `GuidesPage` and the

@@ -19,7 +19,7 @@ public class DockIconSpecsCustomTests
     public void Json_IsWellFormed_AndCarriesTheHandAuthoredKeys()
     {
         using var doc = Doc();
-        foreach (var key in new[] { "guides", "trade", "map" })
+        foreach (var key in new[] { "guides", "trade", "map", "ships" })
             Assert.True(doc.RootElement.TryGetProperty(key, out _), $"missing hand-authored glyph: {key}");
     }
 

@@ -74,7 +74,7 @@ internal sealed class HttpMarketTransport : IMarketDataTransport
 // The cycle is deliberately fault tolerant per DATASET: one endpoint failing never costs the
 // others their data, because stale prices with a visible age are worth more to a miner than an
 // empty panel.
-public sealed class MarketDataService : IDisposable, IMarketCatalog
+public sealed class MarketDataService : IDisposable, IMarketCatalog, IShipCatalog
 {
     public const string Tag = "[NET]";
     public const string BaseUrl = "https://api.uexcorp.uk/2.0/";
@@ -100,6 +100,9 @@ public sealed class MarketDataService : IDisposable, IMarketCatalog
     private const string YieldsEndpoint = "refineries_yields";
     private const string TerminalsEndpoint = "terminals";
     private const string CommoditiesPricesAllEndpoint = "commodities_prices_all";
+    private const string VehiclesEndpoint = "vehicles";
+    private const string VehiclePurchasesEndpoint = "vehicles_purchases_prices_all";
+    private const string VehicleRentalsEndpoint = "vehicles_rentals_prices_all";
 
     private readonly SettingsService _settings;
     private readonly IMarketDataProvider _provider;
@@ -145,6 +148,45 @@ public sealed class MarketDataService : IDisposable, IMarketCatalog
 
     public CachedSlice<CatalogYield> Yields =>
         _cache.Slice(ProviderDataClass.Yields, _cache.CurrentYields(), DateTime.UtcNow);
+
+    public CachedSlice<ShipCatalogEntry> Vehicles =>
+        _cache.Slice(ProviderDataClass.Vehicles, _cache.CurrentVehicles(), DateTime.UtcNow);
+
+    public CachedSlice<CatalogVehiclePurchase> Purchases =>
+        _cache.Slice(ProviderDataClass.VehiclePurchases, _cache.CurrentVehiclePurchases(), DateTime.UtcNow);
+
+    public CachedSlice<CatalogVehicleRental> Rentals =>
+        _cache.Slice(ProviderDataClass.VehicleRentals, _cache.CurrentVehicleRentals(), DateTime.UtcNow);
+
+    public ShipCatalogEntry? ById(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return null;
+        foreach (var row in _cache.CurrentVehicles())
+        {
+            if (string.Equals(row.Id, id, StringComparison.OrdinalIgnoreCase))
+                return row;
+        }
+        return null;
+    }
+
+    public IReadOnlyList<ShipCatalogEntry> Query(ShipCatalogQuery query) =>
+        ShipCatalogQueries.Filter(_cache.CurrentVehicles(), query);
+
+    public IReadOnlyList<CatalogVehiclePurchase> PurchasesFor(string catalogId)
+    {
+        var ship = ById(catalogId);
+        if (ship is null) return [];
+        var id = ship.ProviderId;
+        return _cache.CurrentVehiclePurchases().Where(p => p.VehicleProviderId == id).ToList();
+    }
+
+    public IReadOnlyList<CatalogVehicleRental> RentalsFor(string catalogId)
+    {
+        var ship = ById(catalogId);
+        if (ship is null) return [];
+        var id = ship.ProviderId;
+        return _cache.CurrentVehicleRentals().Where(r => r.VehicleProviderId == id).ToList();
+    }
 
     public bool FetchInProgress => Volatile.Read(ref _busy) != 0;
 
@@ -414,6 +456,22 @@ public sealed class MarketDataService : IDisposable, IMarketCatalog
             var terminals = await _provider.FetchTerminalsAsync(ct).ConfigureAwait(false);
             ApplyCatalogFetch(TerminalsEndpoint, terminals, utcNow, cycle, ProviderDataClass.Terminals,
                 rows => _cache.MergeTerminals(rows, utcNow));
+        }
+
+        var vehicleFetched = _cache.FetchedUtc(ProviderDataClass.Vehicles);
+        if (utcNow - vehicleFetched >= ProviderFreshnessRules.VehicleCadence)
+        {
+            var vehicles = await _provider.FetchVehiclesAsync(ct).ConfigureAwait(false);
+            ApplyCatalogFetch(VehiclesEndpoint, vehicles, utcNow, cycle, ProviderDataClass.Vehicles,
+                rows => _cache.MergeVehicles(rows, utcNow));
+
+            var purchases = await _provider.FetchVehiclePurchasesAsync(ct).ConfigureAwait(false);
+            ApplyCatalogFetch(VehiclePurchasesEndpoint, purchases, utcNow, cycle, ProviderDataClass.VehiclePurchases,
+                rows => _cache.MergeVehiclePurchases(rows, utcNow));
+
+            var rentals = await _provider.FetchVehicleRentalsAsync(ct).ConfigureAwait(false);
+            ApplyCatalogFetch(VehicleRentalsEndpoint, rentals, utcNow, cycle, ProviderDataClass.VehicleRentals,
+                rows => _cache.MergeVehicleRentals(rows, utcNow));
         }
     }
 

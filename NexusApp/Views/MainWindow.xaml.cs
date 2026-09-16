@@ -462,6 +462,7 @@ public partial class MainWindow : Window
         PageHauling.Visibility    = page == "hauling"    ? Visibility.Visible : Visibility.Collapsed;
         PageGuides.Visibility     = page == "guides"     ? Visibility.Visible : Visibility.Collapsed;
         PageTrade.Visibility      = page == "trade"      ? Visibility.Visible : Visibility.Collapsed;
+        PageShips.Visibility      = page == "ships"      ? Visibility.Visible : Visibility.Collapsed;
         PageMap.Visibility        = page == "map"        ? Visibility.Visible : Visibility.Collapsed;
         PagePlanner.Visibility    = page == "planner"    ? Visibility.Visible : Visibility.Collapsed;
         PageGridStudio.Visibility = page == "gridstudio" ? Visibility.Visible : Visibility.Collapsed;
@@ -477,6 +478,7 @@ public partial class MainWindow : Window
         NavHauling.IsChecked  = page == "hauling";
         NavGuides.IsChecked   = page == "guides";
         NavTrade.IsChecked    = page == "trade";
+        NavShips.IsChecked    = page == "ships";
         NavMap.IsChecked      = page == "map";
         NavPlanner.IsChecked  = page == "planner";
         NavGridStudio.IsChecked = page == "gridstudio";
@@ -500,6 +502,7 @@ public partial class MainWindow : Window
             "hauling"    => "SC-navLink - Cargo Hauling",
             "guides"     => "SC-navLink - Mission Guides",
             "trade"      => "SC-navLink - Trade",
+            "ships"      => "SC-navLink - Ships",
             "map"        => "SC-navLink - Starmap",
             "planner"    => "SC-navLink - Cargo Planner",
             "gridstudio" => "SC-navLink - Grid Studio",
@@ -518,6 +521,7 @@ public partial class MainWindow : Window
         if (page == "hauling") InitHaulingPage();
         if (page == "guides") InitGuidesPage();
         if (page == "trade") InitTradePage();
+        if (page == "ships") InitShipsPage();
         if (page == "map") InitMapPage();
         if (page == "planner") InitPlannerPage();
         if (page == "gridstudio") InitGridStudioPage();
@@ -537,6 +541,7 @@ public partial class MainWindow : Window
             "hauling"    => PageHauling,
             "guides"     => PageGuides,
             "trade"      => PageTrade,
+            "ships"      => PageShips,
             "map"        => PageMap,
             "admin"      => PageAdmin,
             "settings"   => PageSettings,
@@ -674,6 +679,7 @@ public partial class MainWindow : Window
         if (NavHauling.IsChecked == true)  return NavHauling;
         if (NavGuides.IsChecked == true)   return NavGuides;
         if (NavTrade.IsChecked == true)    return NavTrade;
+        if (NavShips.IsChecked == true)    return NavShips;
         if (NavMap.IsChecked == true)      return NavMap;
         if (NavPlanner.IsChecked == true)  return NavPlanner;
         if (NavGridStudio.IsChecked == true) return NavGridStudio;
@@ -1061,6 +1067,17 @@ public partial class MainWindow : Window
             _overlay?.SetPlannerBudget(_tradePage.CurrentSessionBudget);
         }
         _tradePage.Refresh();
+    }
+
+    private ShipsPage? _shipsPage;
+    private void InitShipsPage()
+    {
+        if (_shipsPage == null)
+        {
+            _shipsPage = new ShipsPage();
+            PageShips.Children.Add(_shipsPage);
+        }
+        _shipsPage.Refresh();
     }
 
     // Starmap (Task 10): lazy singleton like GuidesPage/TradePage, built once and re-activated

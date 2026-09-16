@@ -14,6 +14,7 @@ public class DataService : IDisposable
     private static readonly JsonSerializerOptions _jsonOpts = new() { PropertyNameCaseInsensitive = true };
 
     private SqliteConnection? _conn;
+    private HangarStore? _hangar;
     private string _seedVersion = "0.0.0";
 
     // Logs the meta-read failure at most once per process, even though MiningDataVersion is
@@ -67,6 +68,7 @@ public class DataService : IDisposable
         CreateSchema();
         MigrateColumns();
         ApplySeed();
+        _hangar = new HangarStore(_dbPath);
         PublishRefineryJobs();
         PublishShoppingList();
     }
@@ -876,6 +878,23 @@ public class DataService : IDisposable
         PublishRefineryJobs();
     }
 
+    // ── My Hangar ────────────────────────────────────────────────────────────
+
+    public IReadOnlyList<HangarEntry> GetHangarShips() =>
+        _hangar?.List() ?? Array.Empty<HangarEntry>();
+
+    public HangarEntry? GetHangarShipByCatalogId(string catalogId) =>
+        _hangar?.ByCatalogId(catalogId);
+
+    public HangarEntry SaveHangarShip(HangarEntry entry)
+    {
+        if (_hangar is null) return entry;
+        return _hangar.Upsert(entry);
+    }
+
+    public bool DeleteHangarShip(string id) =>
+        _hangar is not null && _hangar.Delete(id);
+
     private void PublishRefineryJobs()
     {
         if (GameState is null) return;
@@ -924,7 +943,11 @@ public class DataService : IDisposable
         catch (Exception ex) { Logger.Error($"DataService.{opName} failed", ex); }
     }
 
-    public void Dispose() => _conn?.Dispose();
+    public void Dispose()
+    {
+        _hangar?.Dispose();
+        _conn?.Dispose();
+    }
 
     // ── Seed data DTOs ───────────────────────────────────────────────────────
 

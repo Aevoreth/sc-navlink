@@ -7,7 +7,8 @@ namespace NexusApp.Views;
 // (balance scale, adopted from the approved Trade dock icon mock, candidate 3 of 10 - see
 // nexus-design-lab/trade-icon/index.html); "map" (star system: a filled star, two orbits on
 // different inclinations, and a planet riding the outer one - adopted from the Starmap dock icon
-// mock, candidate 2 of 9, see nexus-design-lab/map-icon/index.html).
+// mock, candidate 2 of 9, see nexus-design-lab/map-icon/index.html); "ships" (hull silhouette for
+// the Ships module).
 public static class DockIconSpecsCustom
 {
     public const string Json = """
@@ -757,6 +758,76 @@ public static class DockIconSpecsCustom
      ],
      "ease": "back",
      "delay": 0.42
+    }
+   ]
+  }
+ },
+ "ships": {
+  "view": [
+   -6,
+   -6,
+   36,
+   36
+  ],
+  "stroke": 1.5,
+  "parts": [
+   {
+    "id": "p0",
+    "el": "path",
+    "d": "M2,13 L7,8 L18,8 L23,12 L23,16 L18,19 L7,19 L2,15 Z"
+   },
+   {
+    "id": "p1",
+    "el": "path",
+    "d": "M18,9 L22,12 L22,16 L18,18"
+   },
+   {
+    "id": "p2",
+    "el": "path",
+    "d": "M2,13 L0,14 L0,16 L2,17"
+   }
+  ],
+  "hover": {
+   "duration": 0.22,
+   "ease": "easeOut",
+   "tracks": [
+    {
+     "part": "p0",
+     "scale": [1, 1.06, 1],
+     "origin": [12, 12]
+    },
+    {
+     "part": "p1",
+     "scale": [1, 1.06, 1],
+     "origin": [12, 12]
+    },
+    {
+     "part": "p2",
+     "scale": [1, 1.06, 1],
+     "origin": [12, 12]
+    }
+   ]
+  },
+  "selected": {
+   "duration": 0.55,
+   "ease": "settle",
+   "tracks": [
+    {
+     "part": "p0",
+     "draw": true,
+     "scale": [0.94, 1],
+     "origin": [12, 12],
+     "delay": 0.0
+    },
+    {
+     "part": "p1",
+     "draw": true,
+     "delay": 0.1
+    },
+    {
+     "part": "p2",
+     "draw": true,
+     "delay": 0.16
     }
    ]
   }

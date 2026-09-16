@@ -9,10 +9,15 @@ internal static class ProviderFreshnessRules
     public static readonly TimeSpan HourlyCadence = TimeSpan.FromHours(1);
     public static readonly TimeSpan ReferenceCadence = TimeSpan.FromHours(24);
 
-    public static TimeSpan CadenceFor(ProviderDataClass dataClass) =>
-        dataClass is ProviderDataClass.Terminals or ProviderDataClass.Yields
-            ? ReferenceCadence
-            : HourlyCadence;
+    public static readonly TimeSpan VehicleCadence = TimeSpan.FromHours(12);
+
+    public static TimeSpan CadenceFor(ProviderDataClass dataClass) => dataClass switch
+    {
+        ProviderDataClass.Terminals or ProviderDataClass.Yields => ReferenceCadence,
+        ProviderDataClass.Vehicles or ProviderDataClass.VehiclePurchases
+            or ProviderDataClass.VehicleRentals => VehicleCadence,
+        _ => HourlyCadence,
+    };
 
     /// <summary>
     /// True when this data class is due for an HTTP call. A stamp in the future

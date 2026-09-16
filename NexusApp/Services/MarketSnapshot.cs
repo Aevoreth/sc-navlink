@@ -63,7 +63,7 @@ public sealed record TradePriceRow(int TerminalId, int CommodityId, double Buy, 
 // Tolerant parsing of UEX API responses. Never throws on any input: malformed JSON, an error
 // envelope, or an unexpected shape all resolve to an empty/false result. Individual bad rows in
 // an otherwise valid array are skipped and counted rather than failing the whole batch.
-internal static class MarketParse
+internal static partial class MarketParse
 {
     // True only when body is valid JSON, is an object, has status == "ok", and has a "data"
     // property. On success, data is a clone that stays valid after this method returns (the

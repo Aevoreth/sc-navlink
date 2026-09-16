@@ -231,6 +231,13 @@ public class SettingsService
 
     public void Save() => Save(Current);
 
+    public void SetActiveShipId(string? catalogId)
+    {
+        Current.ActiveShipId = catalogId ?? "";
+        TradeShipSeed.MaybeSeed(Current, catalogId);
+        Save();
+    }
+
     // ── Blueprint ownership ────────────────────────────────────────────────────
     // Stored name-keyed in settings.json (not nexus.db) so ownership survives the
     // database reseed that happens on every app update.

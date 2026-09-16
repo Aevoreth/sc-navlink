@@ -225,6 +225,8 @@ public class ProviderFreshnessRulesTests
     {
         Assert.Equal(TimeSpan.FromHours(24), ProviderFreshnessRules.CadenceFor(ProviderDataClass.Terminals));
         Assert.Equal(TimeSpan.FromHours(24), ProviderFreshnessRules.CadenceFor(ProviderDataClass.Yields));
+        Assert.Equal(TimeSpan.FromHours(12), ProviderFreshnessRules.CadenceFor(ProviderDataClass.Vehicles));
+        Assert.Equal(TimeSpan.FromHours(12), ProviderFreshnessRules.CadenceFor(ProviderDataClass.VehiclePurchases));
         Assert.Equal(TimeSpan.FromHours(1), ProviderFreshnessRules.CadenceFor(ProviderDataClass.TradePrices));
         Assert.Equal(TimeSpan.FromHours(1), ProviderFreshnessRules.CadenceFor(ProviderDataClass.Commodities));
     }

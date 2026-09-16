@@ -181,6 +181,12 @@ public class AppSettings
     // selection yet.
     public string TradeShipId { get; set; } = "";
 
+    // My Hangar confirmed active ship (UEX vehicle slug). "" = none. Distinct from TradeShipId.
+    public string ActiveShipId { get; set; } = "";
+
+    // SHIPS page sub-tab last open (browser/hangar/loadout).
+    public string ShipsActiveFlow { get; set; } = "browser";
+
     // USE WALLET on the planner's BUDGET filter: while on, the budget tracks the live wallet
     // estimate instead of a typed figure (2026-08-10). Persisted, unlike the budget VALUE it
     // drives, which stays a session field: a hauler who plans against their wallet wants that to

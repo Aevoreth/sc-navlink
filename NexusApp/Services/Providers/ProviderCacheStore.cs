@@ -43,7 +43,8 @@ internal sealed class ProviderCacheStore : IDisposable
                 || ScalarInt("SELECT COUNT(*) FROM trade_prices;") > 0
                 || ScalarInt("SELECT COUNT(*) FROM refined_prices;") > 0
                 || ScalarInt("SELECT COUNT(*) FROM yields;") > 0
-                || ScalarInt("SELECT COUNT(*) FROM raw_prices;") > 0;
+                || ScalarInt("SELECT COUNT(*) FROM raw_prices;") > 0
+                || ScalarInt("SELECT COUNT(*) FROM vehicles;") > 0;
         }
     }
 
@@ -159,6 +160,39 @@ internal sealed class ProviderCacheStore : IDisposable
         }
     }
 
+    public void MergeVehicles(IReadOnlyList<ShipCatalogEntry> rows, DateTime fetchedUtc)
+    {
+        if (rows.Count == 0) return;
+        lock (_gate)
+        {
+            using var tx = _conn.BeginTransaction();
+            MergeVehiclesCore(rows, fetchedUtc);
+            tx.Commit();
+        }
+    }
+
+    public void MergeVehiclePurchases(IReadOnlyList<CatalogVehiclePurchase> rows, DateTime fetchedUtc)
+    {
+        if (rows.Count == 0) return;
+        lock (_gate)
+        {
+            using var tx = _conn.BeginTransaction();
+            MergeVehiclePurchasesCore(rows, fetchedUtc);
+            tx.Commit();
+        }
+    }
+
+    public void MergeVehicleRentals(IReadOnlyList<CatalogVehicleRental> rows, DateTime fetchedUtc)
+    {
+        if (rows.Count == 0) return;
+        lock (_gate)
+        {
+            using var tx = _conn.BeginTransaction();
+            MergeVehicleRentalsCore(rows, fetchedUtc);
+            tx.Commit();
+        }
+    }
+
     public void SetLiveGameVersion(string version, DateTime fetchedUtc)
     {
         lock (_gate)
@@ -239,6 +273,21 @@ internal sealed class ProviderCacheStore : IDisposable
     public IReadOnlyList<CatalogYield> CurrentYields()
     {
         lock (_gate) { return ReadYields(currentOnly: true); }
+    }
+
+    public IReadOnlyList<ShipCatalogEntry> CurrentVehicles()
+    {
+        lock (_gate) { return ReadVehicles(currentOnly: true); }
+    }
+
+    public IReadOnlyList<CatalogVehiclePurchase> CurrentVehiclePurchases()
+    {
+        lock (_gate) { return ReadVehiclePurchases(currentOnly: true); }
+    }
+
+    public IReadOnlyList<CatalogVehicleRental> CurrentVehicleRentals()
+    {
+        lock (_gate) { return ReadVehicleRentals(currentOnly: true); }
     }
 
     public CachedSlice<T> Slice<T>(
@@ -379,6 +428,44 @@ internal sealed class ProviderCacheStore : IDisposable
         CREATE INDEX IF NOT EXISTS ix_yield_seen ON yields(last_seen_utc);
         CREATE INDEX IF NOT EXISTS ix_term_seen ON terminals(last_seen_utc);
         CREATE INDEX IF NOT EXISTS ix_comm_seen ON commodities(last_seen_utc);
+        CREATE TABLE IF NOT EXISTS vehicles (
+            id INTEGER PRIMARY KEY,
+            slug TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            manufacturer TEXT NOT NULL,
+            role TEXT NOT NULL,
+            cargo_scu INTEGER NOT NULL,
+            crew TEXT NOT NULL,
+            mass REAL NOT NULL,
+            length REAL NOT NULL,
+            beam REAL NOT NULL,
+            height REAL NOT NULL,
+            is_concept INTEGER NOT NULL,
+            is_ground INTEGER NOT NULL,
+            is_spaceship INTEGER NOT NULL,
+            store_url TEXT NOT NULL,
+            photo_url TEXT NOT NULL,
+            last_seen_utc INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS vehicle_purchases (
+            vehicle_id INTEGER NOT NULL,
+            terminal_id INTEGER NOT NULL,
+            terminal_name TEXT NOT NULL,
+            price_buy REAL NOT NULL,
+            last_seen_utc INTEGER NOT NULL,
+            PRIMARY KEY (vehicle_id, terminal_id)
+        );
+        CREATE TABLE IF NOT EXISTS vehicle_rentals (
+            vehicle_id INTEGER NOT NULL,
+            terminal_id INTEGER NOT NULL,
+            terminal_name TEXT NOT NULL,
+            price_rent REAL NOT NULL,
+            last_seen_utc INTEGER NOT NULL,
+            PRIMARY KEY (vehicle_id, terminal_id)
+        );
+        CREATE INDEX IF NOT EXISTS ix_vehicle_seen ON vehicles(last_seen_utc);
+        CREATE INDEX IF NOT EXISTS ix_vpurchase_seen ON vehicle_purchases(last_seen_utc);
+        CREATE INDEX IF NOT EXISTS ix_vrental_seen ON vehicle_rentals(last_seen_utc);
     ");
 
     private void MergeCommoditiesCore(IReadOnlyList<CatalogCommodity> rows, DateTime fetchedUtc)
@@ -516,6 +603,84 @@ internal sealed class ProviderCacheStore : IDisposable
                 ("@seen", Ticks(fetchedUtc)));
         }
         UpsertMetaSuccess(ProviderDataClass.Yields, fetchedUtc, FromTicks(maxObs));
+    }
+
+    private void MergeVehiclesCore(IReadOnlyList<ShipCatalogEntry> rows, DateTime fetchedUtc)
+    {
+        const string sql = @"
+            INSERT INTO vehicles (
+                id, slug, display_name, manufacturer, role, cargo_scu, crew, mass, length, beam, height,
+                is_concept, is_ground, is_spaceship, store_url, photo_url, last_seen_utc)
+            VALUES (@id, @slug, @name, @mfr, @role, @scu, @crew, @mass, @len, @beam, @ht,
+                @concept, @ground, @space, @store, @photo, @seen)
+            ON CONFLICT(id) DO UPDATE SET
+                slug = excluded.slug,
+                display_name = excluded.display_name,
+                manufacturer = excluded.manufacturer,
+                role = excluded.role,
+                cargo_scu = excluded.cargo_scu,
+                crew = excluded.crew,
+                mass = excluded.mass,
+                length = excluded.length,
+                beam = excluded.beam,
+                height = excluded.height,
+                is_concept = excluded.is_concept,
+                is_ground = excluded.is_ground,
+                is_spaceship = excluded.is_spaceship,
+                store_url = excluded.store_url,
+                photo_url = excluded.photo_url,
+                last_seen_utc = excluded.last_seen_utc;";
+        foreach (var row in rows)
+        {
+            Exec(sql,
+                ("@id", row.ProviderId), ("@slug", row.Id), ("@name", row.DisplayName),
+                ("@mfr", row.Manufacturer), ("@role", row.Role), ("@scu", row.CargoScu),
+                ("@crew", row.Crew), ("@mass", row.Mass), ("@len", row.Length),
+                ("@beam", row.Beam), ("@ht", row.Height),
+                ("@concept", row.IsConcept ? 1 : 0), ("@ground", row.IsGroundVehicle ? 1 : 0),
+                ("@space", row.IsSpaceship ? 1 : 0),
+                ("@store", row.StoreUrl ?? ""), ("@photo", row.PhotoUrl ?? ""),
+                ("@seen", Ticks(fetchedUtc)));
+        }
+        UpsertMetaSuccess(ProviderDataClass.Vehicles, fetchedUtc, fetchedUtc);
+    }
+
+    private void MergeVehiclePurchasesCore(IReadOnlyList<CatalogVehiclePurchase> rows, DateTime fetchedUtc)
+    {
+        const string sql = @"
+            INSERT INTO vehicle_purchases (vehicle_id, terminal_id, terminal_name, price_buy, last_seen_utc)
+            VALUES (@vid, @tid, @tname, @price, @seen)
+            ON CONFLICT(vehicle_id, terminal_id) DO UPDATE SET
+                terminal_name = excluded.terminal_name,
+                price_buy = excluded.price_buy,
+                last_seen_utc = excluded.last_seen_utc;";
+        foreach (var row in rows)
+        {
+            Exec(sql,
+                ("@vid", row.VehicleProviderId), ("@tid", row.TerminalId),
+                ("@tname", row.TerminalName), ("@price", row.PriceBuy),
+                ("@seen", Ticks(fetchedUtc)));
+        }
+        UpsertMetaSuccess(ProviderDataClass.VehiclePurchases, fetchedUtc, fetchedUtc);
+    }
+
+    private void MergeVehicleRentalsCore(IReadOnlyList<CatalogVehicleRental> rows, DateTime fetchedUtc)
+    {
+        const string sql = @"
+            INSERT INTO vehicle_rentals (vehicle_id, terminal_id, terminal_name, price_rent, last_seen_utc)
+            VALUES (@vid, @tid, @tname, @price, @seen)
+            ON CONFLICT(vehicle_id, terminal_id) DO UPDATE SET
+                terminal_name = excluded.terminal_name,
+                price_rent = excluded.price_rent,
+                last_seen_utc = excluded.last_seen_utc;";
+        foreach (var row in rows)
+        {
+            Exec(sql,
+                ("@vid", row.VehicleProviderId), ("@tid", row.TerminalId),
+                ("@tname", row.TerminalName), ("@price", row.PriceRent),
+                ("@seen", Ticks(fetchedUtc)));
+        }
+        UpsertMetaSuccess(ProviderDataClass.VehicleRentals, fetchedUtc, fetchedUtc);
     }
 
     private void MergeRawPricesCore(IReadOnlyList<CatalogRawPrice> rows, DateTime fetchedUtc)
@@ -696,6 +861,65 @@ internal sealed class ProviderCacheStore : IDisposable
         var list = new List<CatalogRawPrice>();
         while (r.Read())
             list.Add(new CatalogRawPrice(r.GetInt32(0), r.GetInt32(1), r.GetDouble(2), r.GetDouble(3), r.GetString(4), FromTicks(r.GetInt64(5)), r.GetString(6)));
+        return list;
+    }
+
+    private List<ShipCatalogEntry> ReadVehicles(bool currentOnly)
+    {
+        var sql = currentOnly
+            ? @"SELECT id, slug, display_name, manufacturer, role, cargo_scu, crew, mass, length, beam, height,
+                      is_concept, is_ground, is_spaceship, store_url, photo_url
+               FROM vehicles WHERE last_seen_utc = (SELECT fetched_utc FROM slice_meta WHERE data_class = @cls);"
+            : @"SELECT id, slug, display_name, manufacturer, role, cargo_scu, crew, mass, length, beam, height,
+                      is_concept, is_ground, is_spaceship, store_url, photo_url FROM vehicles;";
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = sql;
+        cmd.Parameters.AddWithValue("@cls", Name(ProviderDataClass.Vehicles));
+        using var r = cmd.ExecuteReader();
+        var list = new List<ShipCatalogEntry>();
+        while (r.Read())
+        {
+            var store = r.GetString(14);
+            var photo = r.GetString(15);
+            list.Add(new ShipCatalogEntry(
+                r.GetInt32(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetString(4),
+                r.GetInt32(5), r.GetString(6), r.GetDouble(7), r.GetDouble(8), r.GetDouble(9), r.GetDouble(10),
+                r.GetInt32(11) != 0, r.GetInt32(12) != 0, r.GetInt32(13) != 0,
+                string.IsNullOrEmpty(store) ? null : store,
+                string.IsNullOrEmpty(photo) ? null : photo));
+        }
+        return list;
+    }
+
+    private List<CatalogVehiclePurchase> ReadVehiclePurchases(bool currentOnly)
+    {
+        var sql = currentOnly
+            ? @"SELECT vehicle_id, terminal_id, terminal_name, price_buy FROM vehicle_purchases
+               WHERE last_seen_utc = (SELECT fetched_utc FROM slice_meta WHERE data_class = @cls);"
+            : @"SELECT vehicle_id, terminal_id, terminal_name, price_buy FROM vehicle_purchases;";
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = sql;
+        cmd.Parameters.AddWithValue("@cls", Name(ProviderDataClass.VehiclePurchases));
+        using var r = cmd.ExecuteReader();
+        var list = new List<CatalogVehiclePurchase>();
+        while (r.Read())
+            list.Add(new CatalogVehiclePurchase(r.GetInt32(0), r.GetInt32(1), r.GetString(2), r.GetDouble(3)));
+        return list;
+    }
+
+    private List<CatalogVehicleRental> ReadVehicleRentals(bool currentOnly)
+    {
+        var sql = currentOnly
+            ? @"SELECT vehicle_id, terminal_id, terminal_name, price_rent FROM vehicle_rentals
+               WHERE last_seen_utc = (SELECT fetched_utc FROM slice_meta WHERE data_class = @cls);"
+            : @"SELECT vehicle_id, terminal_id, terminal_name, price_rent FROM vehicle_rentals;";
+        using var cmd = _conn.CreateCommand();
+        cmd.CommandText = sql;
+        cmd.Parameters.AddWithValue("@cls", Name(ProviderDataClass.VehicleRentals));
+        using var r = cmd.ExecuteReader();
+        var list = new List<CatalogVehicleRental>();
+        while (r.Read())
+            list.Add(new CatalogVehicleRental(r.GetInt32(0), r.GetInt32(1), r.GetString(2), r.GetDouble(3)));
         return list;
     }
 
