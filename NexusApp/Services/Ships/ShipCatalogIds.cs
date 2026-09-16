@@ -1,3 +1,6 @@
+using NexusApp.Models.Cargo;
+using NexusApp.Services.Cargo;
+
 namespace NexusApp.Services;
 
 /// <summary>
@@ -32,6 +35,28 @@ public static class ShipCatalogIds
         return id is null ? null : trade.ById(id);
     }
 
+    public static TradeShip? ToTradeShip(string? catalogId) => ToTradeShip(catalogId, Trade.Value);
+
+    public static ShipCargoDef? ToCargoShip(string? catalogId, CargoShipCatalog? cargo = null)
+    {
+        cargo ??= CargoGrids.Value;
+        if (string.IsNullOrWhiteSpace(catalogId)) return null;
+        if (cargo.ById(catalogId) is { } exact) return exact;
+        foreach (var ship in cargo.Ships)
+        {
+            if (ship.Id.EndsWith("-" + catalogId, StringComparison.OrdinalIgnoreCase))
+                return ship;
+        }
+
+        foreach (var ship in cargo.Ships)
+        {
+            if (string.Equals(ship.DisplayName, catalogId, StringComparison.OrdinalIgnoreCase))
+                return ship;
+        }
+
+        return null;
+    }
+
     public static int? UsableScu(ShipCatalogEntry? catalog, TradeShipCatalog? trade = null)
     {
         if (catalog is null) return null;
@@ -42,4 +67,5 @@ public static class ShipCatalogIds
     }
 
     private static readonly Lazy<TradeShipCatalog> Trade = new(TradeShipCatalog.LoadEmbedded);
+    private static readonly Lazy<CargoShipCatalog> CargoGrids = new(CargoShipCatalog.LoadEmbedded);
 }

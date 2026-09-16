@@ -35,7 +35,7 @@ app makes a network call.
 |  Network(File/Store/Scope) |                              |
 |  Update(Service/Verifier/Manifest/Notice) |               |
 |  Market(DataService/Catalog/Cache/UexProvider/Snapshot/Queries) |    |
-|  Ships(IShipCatalog/HangarStore/ShipImageCache) | Guides | ExecHangar |    |
+|  Ships(IShipCatalog/HangarStore/ShipImageCache) | CargoState | Guides | ExecHangar |    |
 |  Overlay(Tabs/GhostGeometry/GhostFootprints) |            |
 |  ScmdbImport(Parser/Plan) |                               |
 |  UiScaleService |                                         |
@@ -49,6 +49,7 @@ app makes a network call.
 |            settings  +  local network.db (Blueprint Net)  |
 |            +  cache/provider_cache.db (UEX market cache)  |
 |            +  cache/ship_images (on-demand previews)      |
+|            +  hangar_ships / cargo_lots in nexus.db       |
 +-----------------------------------------------------------+
 ```
 
@@ -68,6 +69,17 @@ specs, a store link, and cached buy or rent prices.
 Manufacturer chips and role chips filter the Browser. My Hangar lets you set
 pledged, purchased, or rented, plus location and rental expiry. Named
 loadouts stay off the hangar row until the Loadout Calculator exists.
+
+Cargo Hauling shows an Aboard panel above the contract cards. Aboard is the
+editor for cargo on the active hangar ship. Add a 0 SCU lot, then set the
+commodity and crate counts (32, 24, 16, 8, 4, 2, 1 SCU). On-grid counts clamp
+to space left with cargo already aboard. Off-Grid is if-it-fits-it-ships:
+holds are often larger than the cargo grid, so those counts are not clamped
+to the grid. Off-Grid and Contracted are pills on the lot row. Destination
+is a free-text note on the lot; it is not linked to a terminal or haul stop.
+Linking that note comes later if needed. COMMITTED still
+counts contract and route SCU against the Trade planner ship. Clear all
+removes hauls only.
 
 `GuidesPage` is the Mission Guides dock page: a category-grouped card grid over
 the shared `GuideCatalog`. Clicking a card hands the page over to
@@ -98,7 +110,7 @@ copy is necessary.
 Scan results and refinery work orders flow through the same view model. So they
 stay consistent everywhere. The view model publishes decoded mining scans into
 `GameState`. It does not keep a second live copy of location, session, shard,
-hauling, wallet, or goals.
+hauling, wallet, goals, active ship, or cargo.
 
 ### GameState (`Services/GameState.cs`)
 `GameState` is the app-lifetime store for live operation facts. It is free of
@@ -116,22 +128,25 @@ The current slices are:
 - refinery jobs
 - durable goals (shopping list and owned blueprints)
 - active ship and usable cargo capacity
+- carried cargo on the active ship
 
 `PublishX` methods are internal. Ordinary UI code cannot mutate a slice. A
 publish replaces one snapshot. Identical evidence is not a transition. Events
 fire outside the state lock: `Changed`, and one event per slice.
 
 `GameState` is not a settings store. It is not the UEX market catalog. It is
-not the hangar list. It is not a cargo inventory.
+not the hangar list. It is not the cargo lot table on disk.
 
 The hauling slice holds contract stops. Those stops do not prove that cargo is
 on the ship. My Hangar plus `AppSettings.ActiveShipId` are the store of record
-for the confirmed ship. `GameState` publishes the live snapshot. Cargo
-inventory belongs to later work.
+for the confirmed ship. `cargo_lots` in `nexus.db` is the store of record for
+carried cargo. `GameState` publishes the live snapshots. The cargo slice holds
+the active ship's lots plus used and free SCU.
 
 `App.GameState` is the one instance. `PlayerPlace` reads location from it.
 `NextPlanner` reads location and hauling stops from it. The Ships module
-publishes the active ship into it.
+publishes the active ship into it. Cargo Hauling publishes confirmed lots
+into the cargo slice.
 
 ### Services (`Services/`)
 The view model controls these services. Each service holds little or no state.
@@ -141,7 +156,12 @@ The view model controls these services. Each service holds little or no state.
 - **DataService** - loads the reference data (resources and blueprints). It
   saves the user data with SQLite and JSON. My Hangar rows live in `hangar_ships`
   inside `nexus.db`. Each row stores acquisition, optional rental expiry, and
-  last-known location.
+  last-known location. Carried cargo lots live in `cargo_lots` in the same
+  file. Each lot stores ship id, commodity, SCU, optional container size,
+  provenance, Off-Grid, Contracted, and Destination. Destination is a user
+  note, not a linked terminal or haul stop. A later issue can attach that
+  note to a stop if needed; it stays on the cargo lot, not on haul cards
+  and not as a new GameState slice.
 - **OcrService** - captures a screen region. It runs Windows OCR, the native OCR
   engine. It prepares the image (invert, contrast, and upscale). It reads the RS
   values from the recognized text. A scan region can yield more than one
@@ -209,6 +229,13 @@ The view model controls these services. Each service holds little or no state.
   listings, rent listings, and the store URL. The store URL must pass the same
   HTTPS host allowlist as `ShipImageCache`. The Ships page reads this. It does
   not format those facts inline.
+- **CargoState (CargoStore / CargoLots / CargoProjection)** - durable lots in
+  `cargo_lots`. `CargoProjection` builds the GameState cargo slice for the
+  active hangar ship. Aboard on Cargo Hauling is the first editor. It does not
+  copy contract SCU into the hold. A lot may be marked Contracted by the user;
+  that is not a haul card. Destination is a free-text note on the lot. It is
+  not linked to a haul stop or terminal yet; linking it stays on cargo lots
+  (or splits of a lot), not on `GameHaulingState`.
 - **GuideCatalog** - the single source of truth for the Mission Guides feature.
   Each entry is one curated guide image: an id, a title, a category, an
   embedded PNG resource, and its native pixel size. `GuidesPage` and the
@@ -379,7 +406,20 @@ adds the reward, the contractor, and the cargo details to the matching haul.
 recent server and shard list. `ContractCapCatalog` is an embedded table. It maps
 each contract to its container size in SCU. The `Haul` model holds the haul state.
 `HaulTracker` also publishes the active hauls and incomplete stops into
-`GameState`.
+`GameState`. A log reset, a shard change, and a PU exit clear that slice.
+They do not clear `cargo_lots`.
+
+The Cargo Hauling page hosts Aboard above the contract cards. Aboard edits
+the cargo believed to be on the active hangar ship. Add a 0 SCU lot, then
+set the commodity and crate counts. On-grid fit packs boxes already aboard,
+then clamps each size to what still lies flat (yaw only). Off-Grid is
+if-it-fits-it-ships: it does not clamp to the cargo grid, because holds are
+often larger than the grid for maneuvering. Off-Grid and Contracted are
+pills on the lot row. A lot may be marked Contracted; that flag does not
+create or bind a haul card. Destination is a user note on the lot, not a
+linked stop. Linking that note (or splitting lots by destination) stays
+off haul cards until a later issue. COMMITTED still counts
+accepted contract and route SCU against the Trade planner ship.
 
 ### NEXT (hauling rule set)
 `NextPlanner` reads location and hauling stops from `GameState`. It ranks a stop

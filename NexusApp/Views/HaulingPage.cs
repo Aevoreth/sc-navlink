@@ -17,10 +17,10 @@ namespace NexusApp.Views;
 /// The Cargo Hauling page (code-built, like NetworkPage), rebuilt onto the shared MOBIGLAS
 /// Hud primitives. Reads App.Hauls and App.Settings.Current.PinnedRoutes, and renders the section
 /// order the trade/cargo fusion spec lays out (2026-08-09, section 3): the money bar and the
-/// auto-load countdown (both built once in Build), accepted trade routes, active-haul cards, the
-/// merged STOPS board, THIS RUN PAYS beside COMMITTED, and finished hauls. Rebuilds itself
-/// whenever the haul tracker raises Changed, and MainWindow repaints it when a matched
-/// transaction moves a route.
+/// auto-load countdown (both built once in Build), the Aboard hold editor, accepted trade routes,
+/// active-haul cards, the merged STOPS board, THIS RUN PAYS beside COMMITTED, and finished hauls.
+/// Rebuilds itself whenever the haul tracker raises Changed, and MainWindow repaints it when a
+/// matched transaction moves a route. Aboard is cargo inventory. COMMITTED is obligation math.
 /// </summary>
 public sealed class HaulingPage : UserControl
 {
@@ -28,6 +28,7 @@ public sealed class HaulingPage : UserControl
     private Button? _clearBtn;   // built once in the header; visibility toggled by Refresh()
     private AutoLoadStatusLine? _autoLoadPanel;   // moved off Trade 2026-08-09; app-lifetime, started once
     private MoneyPanel? _moneyPanel;   // moved off Trade 2026-08-09 (task B4); repainted via Refresh()
+    private CargoAboardPanel? _aboardPanel;   // issue #26: hold inventory, not contract obligations
 
     // Row-insert highlight identity: haul id + leg/objective key, tracked across rebuilds so the
     // one-shot flash only ever plays once per row, on the Refresh() where it first appears.
@@ -92,8 +93,16 @@ public sealed class HaulingPage : UserControl
         bool allowHighlight = _hasSeededOnce && IsVisible && !Motion.Reduced;
 
         // Clear-all lives in the header (built once); only show it when there's something to clear.
+        // It clears hauls only. Aboard cargo has its own Clear aboard control.
         if (_clearBtn is not null)
             _clearBtn.Visibility = App.Hauls.AllHauls.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        // Aboard is hold inventory for the active hangar ship. It stays visible with no contracts.
+        if (_aboardPanel is not null)
+        {
+            _aboardPanel.Refresh();
+            _body.Children.Add(_aboardPanel);
+        }
 
         // Accepted trade routes (Task C, spec 2026-08-09 section 3): rendered ABOVE Active hauls,
         // and unconditionally - unlike the hauls sections below, an empty accepted-route list is
@@ -105,7 +114,7 @@ public sealed class HaulingPage : UserControl
         // It used to turn on contracts alone, which meant a hauler with accepted routes and no
         // contract saw their routes and then "No active hauls" - and never saw the stop board, the
         // payout or the commitment, all three of which are about the routes as much as the
-        // contracts.
+        // contracts. Aboard still shows above this placeholder.
         var routes = App.Settings.Current.PinnedRoutes;
         if (App.Hauls.AllHauls.Count == 0 && routes.Count == 0)
         {
@@ -169,6 +178,8 @@ public sealed class HaulingPage : UserControl
         _autoLoadPanel.Start();
         _autoLoadPanel.Margin = new Thickness(0, 0, 0, 12);
         Grid.SetRow(_autoLoadPanel, 2); root.Children.Add(_autoLoadPanel);
+
+        _aboardPanel = new CargoAboardPanel();
 
         var scroller = new ScrollViewer
         {
@@ -833,10 +844,8 @@ public sealed class HaulingPage : UserControl
     }
 
     /// <summary>COMMITTED: the SCU your accepted work commits you to, against the ship selected in
-    /// the planner. This is deliberately NOT "what is in your hold", which the app cannot know -
-    /// there is no ship detection and no running cargo total (AutoLoadStatusLine.cs says as much
-    /// about the ship). What you signed up for against the hull you told the planner you fly is
-    /// the honest version of that question.</summary>
+    /// the planner. This is obligation math, not hold inventory. What is aboard the active hangar
+    /// ship lives on <c>GameCargoState</c> and is edited in the Aboard panel above.</summary>
     private Grid BuildCommittedPanel(out CommittedLoad load)
     {
         // Pickups only: every contract leg appears twice in the consolidation, once to collect and
