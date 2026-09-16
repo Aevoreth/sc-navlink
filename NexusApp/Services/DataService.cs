@@ -664,11 +664,16 @@ public class DataService : IDisposable
         {
             var result = new List<Blueprint>();
             using var cmd = _conn!.CreateCommand();
-            cmd.CommandText = "SELECT DISTINCT id,name,category FROM blueprints WHERE LOWER(name) LIKE @q ORDER BY name LIMIT 50";
+            cmd.CommandText = "SELECT DISTINCT id,name,category,sub_category FROM blueprints WHERE LOWER(name) LIKE @q ORDER BY name";
             cmd.Parameters.AddWithValue("@q", $"%{query.ToLower()}%");
             using var rdr = cmd.ExecuteReader();
             while (rdr.Read())
-                result.Add(new Blueprint { Name = rdr.GetString(1), Category = rdr.GetString(2) });
+                result.Add(new Blueprint
+                {
+                    Name = rdr.GetString(1),
+                    Category = rdr.GetString(2),
+                    SubCategory = rdr.IsDBNull(3) ? null : rdr.GetString(3),
+                });
             return result;
         }
         catch (Exception ex)

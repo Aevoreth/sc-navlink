@@ -34,9 +34,9 @@ public class OcrService : IDisposable
         catch { _available = false; }
     }
 
-    public async Task<(int? Value, bool PinFound)> ScanFullScreenAsync()
+    public async Task<(IReadOnlyList<int> Values, bool PinFound)> ScanFullScreenAsync()
     {
-        if (!_available || _engine == null) return (null, false);
+        if (!_available || _engine == null) return (Array.Empty<int>(), false);
 
         byte[]? raw;
         int bw, bh;
@@ -45,7 +45,7 @@ public class OcrService : IDisposable
         {
             // Use stored coordinates — capture only the known scan region.
             raw = CaptureRegion(_regX, _regY, _regW, _regH);
-            if (raw == null) return (null, false);
+            if (raw == null) return (Array.Empty<int>(), false);
             LastScanHadRegion = true;
             bw = _regW; bh = _regH;
         }
@@ -54,14 +54,14 @@ public class OcrService : IDisposable
             // Fallback: find the magenta scan-box border on the full screen.
             var fw = GetSystemMetrics(SM_CXSCREEN);
             var fh = GetSystemMetrics(SM_CYSCREEN);
-            if (fw <= 0 || fh <= 0) return (null, false);
+            if (fw <= 0 || fh <= 0) return (Array.Empty<int>(), false);
 
             var full = CaptureRegion(0, 0, fw, fh);
-            if (full == null) return (null, false);
+            if (full == null) return (Array.Empty<int>(), false);
 
             var box = FindMagentaRegion(full, fw, fh);
             LastScanHadRegion = box != null;
-            if (box == null) return (null, false);
+            if (box == null) return (Array.Empty<int>(), false);
 
             var (bx, by, _bw, _bh) = box.Value;
             raw = ExtractSubRegion(full, fw, bx, by, _bw, _bh);
@@ -70,15 +70,57 @@ public class OcrService : IDisposable
 
         try
         {
-            var processed = Preprocess(raw!, bw, bh, out int pw, out int ph);
-            var softBmp   = ToSoftwareBitmap(processed, pw, ph);
-            var result    = await _engine.RecognizeAsync(softBmp);
-            var val       = ExtractRsValue(result.Text);
-            return (val, val.HasValue);
+            var values = await RecognizeStacked(raw!, bw, bh);
+            // A drawn/found region still counts as a pin when OCR reads nothing this tick.
+            // Treating a blank read as pin-lost resets confirmation and is what made a
+            // three-signature region never lock.
+            return (values, true);
         }
         catch { }
 
-        return (null, false);
+        return (Array.Empty<int>(), LastScanHadRegion);
+    }
+
+    // Compact HUD pills are ~24-32px tall. 56px bands often cover two rows and skip
+    // entirely when the drawn region is shorter than 76px.
+    private const int StackBandHeight = 28;
+    private const int StackBandOverlap = 10;
+
+    private async Task<IReadOnlyList<int>> RecognizeStacked(byte[] raw, int w, int h)
+    {
+        var full = await RecognizeRaw(raw, w, h);
+        if (h < StackBandHeight + StackBandOverlap)
+            return full.Values;
+
+        var bands = new List<int>();
+        var seen = new HashSet<int>();
+        for (var y = 0; y < h; )
+        {
+            var bandH = Math.Min(StackBandHeight, h - y);
+            if (bandH < 16) break;
+            var slice = ExtractSubRegion(raw, w, 0, y, w, bandH);
+            foreach (var val in (await RecognizeRaw(slice, w, bandH)).Values)
+            {
+                if (seen.Add(val))
+                    bands.Add(val);
+            }
+            if (y + bandH >= h) break;
+            y += StackBandHeight - StackBandOverlap;
+        }
+
+        if (bands.Count > full.Values.Count)
+            return bands;
+        if (full.Values.Count == 0)
+            return bands;
+        return full.Values;
+    }
+
+    private async Task<(IReadOnlyList<int> Values, string Text)> RecognizeRaw(byte[] raw, int w, int h)
+    {
+        var processed = Preprocess(raw, w, h, out int pw, out int ph);
+        var softBmp = ToSoftwareBitmap(processed, pw, ph);
+        var result = await _engine!.RecognizeAsync(softBmp);
+        return (ExtractRsValuesFromOcr(result), result.Text);
     }
 
     // ── Preprocessing ──────────────────────────────────────────────────────────
@@ -128,28 +170,166 @@ public class OcrService : IDisposable
 
     // ── Value extraction ───────────────────────────────────────────────────────
 
-    // Matches "X XXX" (single digit, space, exactly 3 digits) with no surrounding digits —
-    // covers 2,000–9,999 where OCR reads the thousands comma as a space.
-    private static readonly Regex _splitThousands = new(@"(?<!\d)(\d) (\d{3})(?!\d)", RegexOptions.Compiled);
+    // Matches "X XXX" / "XX XXX" / "XXX XXX" (1-3 digits, space, exactly 3 digits) with no
+    // surrounding digits. Covers 2,000–200,000 where OCR reads the thousands comma as a space.
+    private static readonly Regex _splitThousands = new(@"(?<!\d)(\d{1,3}) (\d{3})(?!\d)", RegexOptions.Compiled);
 
     internal static int? ExtractRsValue(string text)
     {
-        // Strip commas/periods sitting between two digit characters ("17,200" → "17200")
+        var values = ExtractRsValues(text);
+        return values.Count == 0 ? null : values[0];
+    }
+
+    /// <summary>
+    /// Every valid RS-sized number in reading order. Newlines keep line identity so two
+    /// signatures on separate rows do not merge into one digit run.
+    /// </summary>
+    internal static IReadOnlyList<int> ExtractRsValues(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return Array.Empty<int>();
+
+        var found = new List<int>();
+        var seen = new HashSet<int>();
+        foreach (var line in SplitOcrLines(text))
+        {
+            foreach (var val in ExtractRsRuns(line))
+            {
+                if (seen.Add(val))
+                    found.Add(val);
+            }
+        }
+        return found;
+    }
+
+    private static IReadOnlyList<int> ExtractRsValuesFromOcr(OcrResult result)
+    {
+        var found = new List<int>();
+        var seen = new HashSet<int>();
+
+        if (result.Lines is { Count: > 0 })
+        {
+            foreach (var line in result.Lines)
+            {
+                if (line.Words is { Count: > 0 })
+                {
+                    foreach (var word in line.Words.OrderBy(w => w.BoundingRect.X))
+                        AddUnique(found, seen, ExtractRsRuns(word.Text));
+                }
+                else
+                    AddUnique(found, seen, ExtractRsRuns(line.Text));
+            }
+        }
+
+        if (found.Count == 0)
+            AddUnique(found, seen, ExtractRsValues(result.Text));
+
+        return found;
+    }
+
+    private static void AddUnique(List<int> found, HashSet<int> seen, IEnumerable<int> values)
+    {
+        foreach (var val in values)
+        {
+            if (seen.Add(val))
+                found.Add(val);
+        }
+    }
+
+    /// <summary>
+    /// Split a digit run longer than 6 chars into as many 4-6 digit chunks as possible,
+    /// then keep those that fall in the RS range. OCR often concatenates stacked
+    /// signatures into one token such as 17200450008000. A 4-digit leftover under
+    /// 2000 (1328) is consumed as a chunk so it cannot poison 5291 + 18500.
+    /// </summary>
+    internal static List<int> SplitLongDigitRun(ReadOnlySpan<char> digits)
+    {
+        var s = digits.ToString();
+        var n = s.Length;
+        var best = new List<int>?[n + 1];
+        best[n] = [];
+        for (var i = n - 1; i >= 0; i--)
+        {
+            List<int>? chosen = null;
+            for (var len = 4; len <= 6 && i + len <= n; len++)
+            {
+                if (!TryParseDigitChunk(s.AsSpan(i, len), out var val)) continue;
+                var rest = best[i + len];
+                if (rest is null) continue;
+                var candidate = new List<int>(1 + rest.Count) { val };
+                candidate.AddRange(rest);
+                if (IsBetterSplit(candidate, chosen))
+                    chosen = candidate;
+            }
+            best[i] = chosen;
+        }
+
+        var split = best[0];
+        if (split is null || split.Count == 0) return [];
+        var inRange = new List<int>(split.Count);
+        foreach (var val in split)
+        {
+            if (val is >= 2000 and <= 200000)
+                inRange.Add(val);
+        }
+        return inRange;
+    }
+
+    private static bool IsBetterSplit(List<int> candidate, List<int>? current)
+    {
+        if (current is null) return true;
+        if (candidate.Count != current.Count) return candidate.Count > current.Count;
+        for (var i = 0; i < candidate.Count; i++)
+        {
+            var a = DigitLen(candidate[i]);
+            var b = DigitLen(current[i]);
+            if (a != b) return a < b;
+        }
+        return false;
+    }
+
+    private static int DigitLen(int value) => value switch
+    {
+        >= 100000 => 6,
+        >= 10000 => 5,
+        _ => 4,
+    };
+
+    private static bool TryParseDigitChunk(ReadOnlySpan<char> digits, out int value)
+    {
+        value = 0;
+        if (digits.Length is < 4 or > 6 || digits[0] == '0') return false;
+        return int.TryParse(digits, out value);
+    }
+
+    private static bool TryParseRs(ReadOnlySpan<char> digits, out int value)
+        => TryParseDigitChunk(digits, out value) && value is >= 2000 and <= 200000;
+
+    private static string[] SplitOcrLines(string text)
+        => text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+
+    private static List<int> ExtractRsRuns(string text)
+    {
+        // Strip commas/periods sitting between two digit characters ("17,200" → "17200").
+        // Also drop a comma/period before a space+digit ("18, 500" → "18 500") so the
+        // thousands regex can collapse it.
         var sb = new System.Text.StringBuilder(text.Length);
         for (int i = 0; i < text.Length; i++)
         {
             char c = text[i];
-            if ((c == ',' || c == '.') &&
-                i > 0 && i < text.Length - 1 &&
-                char.IsDigit(text[i - 1]) && char.IsDigit(text[i + 1]))
-                continue;
+            if ((c == ',' || c == '.') && i > 0 && char.IsDigit(text[i - 1]))
+            {
+                if (i + 1 < text.Length && char.IsDigit(text[i + 1]))
+                    continue;
+                if (i + 2 < text.Length && text[i + 1] == ' ' && char.IsDigit(text[i + 2]))
+                    continue;
+            }
             sb.Append(c);
         }
 
         // Collapse "X XXX" → "XXXX" for cases where OCR reads the comma as a space
         var normalized = _splitThousands.Replace(sb.ToString(), "$1$2");
 
-        // Find first continuous digit run of 4–6 chars in valid RS range
+        var runs = new List<int>();
         int start = -1;
         for (int i = 0; i <= normalized.Length; i++)
         {
@@ -161,14 +341,14 @@ public class OcrService : IDisposable
             else if (!isDigit && start != -1)
             {
                 int len = i - start;
-                if (len >= 4 && len <= 6 &&
-                    int.TryParse(normalized.AsSpan(start, len), out var val) &&
-                    val >= 2000 && val <= 200000)
-                    return val;
+                if (len >= 4 && len <= 6 && TryParseRs(normalized.AsSpan(start, len), out var val))
+                    runs.Add(val);
+                else if (len > 6)
+                    runs.AddRange(SplitLongDigitRun(normalized.AsSpan(start, len)));
                 start = -1;
             }
         }
-        return null;
+        return runs;
     }
 
     // ── Capture / convert ──────────────────────────────────────────────────────

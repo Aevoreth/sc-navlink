@@ -29,7 +29,7 @@ app makes a network call.
                              |  calls
 +----------------------------v------------------------------+
 |  Services                                                 |
-|  Data | Ocr | Scanner | Settings | Theme |                |
+|  GameState | Data | Ocr | Scanner | Settings | Theme |    |
 |  GameLogFeed -> Session / Hauling / Shard | Importer |    |
 |  Hauling(HaulTracker/Parser/Contract/Shard) | NextPlanner |
 |  Network(File/Store/Scope) |                              |
@@ -87,16 +87,50 @@ commands. So a change on one surface also shows on the other surface. No manual
 copy is necessary.
 
 Scan results and refinery work orders flow through the same view model. So they
-stay consistent everywhere.
+stay consistent everywhere. The view model publishes decoded mining scans into
+`GameState`. It does not keep a second live copy of location, session, shard,
+hauling, wallet, or goals.
+
+### GameState (`Services/GameState.cs`)
+`GameState` is the app-lifetime store for live operation facts. It is free of
+WPF. Each domain tracker parses its source and publishes an immutable snapshot.
+Consumers read those snapshots. They must not keep a second live copy.
+
+The current slices are:
+
+- location
+- session
+- shard
+- hauling contract stops
+- wallet
+- mining scan
+- refinery jobs
+- durable goals (shopping list and owned blueprints)
+
+`PublishX` methods are internal. Ordinary UI code cannot mutate a slice. A
+publish replaces one snapshot. Identical evidence is not a transition. Events
+fire outside the state lock: `Changed`, and one event per slice.
+
+`GameState` is not a settings store. It is not the UEX market catalog. It is
+not an active-ship record. It is not a cargo inventory.
+
+The hauling slice holds contract stops. Those stops do not prove that cargo is
+on the ship. Active ship and cargo inventory belong to later work.
+
+`App.GameState` is the one instance. `PlayerPlace` reads location from it.
+`NextPlanner` reads location and hauling stops from it.
 
 ### Services (`Services/`)
 The view model controls these services. Each service holds little or no state.
 
+- **GameState** - the shared live-operation store. See the GameState section.
+  Trackers publish snapshots. Consumers observe those snapshots.
 - **DataService** - loads the reference data (resources and blueprints). It
   saves the user data with SQLite and JSON.
 - **OcrService** - captures a screen region. It runs Windows OCR, the native OCR
   engine. It prepares the image (invert, contrast, and upscale). It reads the RS
-  value from the recognized text.
+  values from the recognized text. A scan region can yield more than one
+  signature.
 - **ScannerService** - runs the opt-in auto-scan loop. It reports the readings.
 - **SettingsService** - loads and saves `AppSettings`. It also moves app data
   from the old folder name.
@@ -113,10 +147,11 @@ The view model controls these services. Each service holds little or no state.
   ShardTracker / ShardLogParser / ContractCapCatalog)** - the cargo-hauling
   subsystem (see below). It reads `Game.log` read-only.
 - **NextPlanner** - the first `NEXT` recommendation model. It is independent of
-  WPF. It reads current location and known hauling stops. It returns an ordered
-  list of next actions with an explanation, a score, and a confidence. It does
-  not call a provider. It does not use an AI model. Later trade, mining,
-  refinery, and blueprint actions can use the same `NextAction` contract.
+  WPF. It reads current location and known hauling stops from `GameState`. It
+  returns an ordered list of next actions with an explanation, a score, and a
+  confidence. It does not call a provider. It does not use an AI model. Later
+  trade, mining, refinery, and blueprint actions can use the same `NextAction`
+  contract. Operations and the overlay do not show this list yet.
 - **Network (NetworkFileService / NetworkStore / NetworkScope)** - the
   file-exchange subsystem for the offline Blueprint Network (see below).
 - **Update (UpdateService / UpdateVerifier / UpdateManifest / UpdateNotice)** -
@@ -207,6 +242,14 @@ types.
 - **Reference data** ships as `Data/seed_data.json`. The build embeds it into
   the assembly as a resource. It is the single source of mining and blueprint
   data. It ships inside each release. There is no data-only over-the-air path.
+
+  The Blueprint Library catalog is the `blueprints` array in that seed.
+  `components.ini` maps Game.log item keys to official names. It is not the
+  catalog. Owned marks live in settings. A catalog reseed does not clear them.
+
+  Browse lists every category that the seed contains. Search returns every
+  matching name. A name that is absent from a loaded catalog is unknown. An
+  empty catalog is an ingestion failure, not a list of unknown names.
   A second embedded reference, `Data/components.ini`, maps internal component
   keys to their official names. The build refreshes it for each game patch.
 - **User data** (settings, work orders, and the owned-blueprint library) is on
@@ -259,8 +302,13 @@ types.
 3. `OcrService` prepares the capture. It inverts the colors, so light-on-dark
    game text becomes dark-on-light. It boosts the contrast and upscales 6x. Then
    it runs Windows OCR.
-4. NexusApp parses the recognized text into an RS integer. The view model
-   decodes that integer into the matching resource and node count.
+4. NexusApp parses the recognized text into one or more RS integers. Two
+signatures on separate lines stay distinct. A stacked region is read in
+short horizontal bands so three compact HUD pills do not merge into one
+digit run. Concatenated digit runs keep every valid RS prefix; a leftover
+value under 2,000 does not discard the others. Each signature confirms on
+its own. A blank OCR tick does not clear a pending read. The view model
+decodes each integer into the matching resource and node count.
 
 ### Session Tracking (always on)
 Session Tracking is always on. NexusApp has no user toggle for it.
@@ -301,6 +349,18 @@ adds the reward, the contractor, and the cargo details to the matching haul.
 `ShardTracker` and `ShardLogParser` read the shard join lines. They keep the
 recent server and shard list. `ContractCapCatalog` is an embedded table. It maps
 each contract to its container size in SCU. The `Haul` model holds the haul state.
+`HaulTracker` also publishes the active hauls and incomplete stops into
+`GameState`.
+
+### NEXT (hauling rule set)
+`NextPlanner` reads location and hauling stops from `GameState`. It ranks a stop
+at the current location first. If the location is unknown, it ranks pickups
+before dropoffs. Each `NextAction` has a module, a kind, a score, an
+explanation, and a confidence.
+
+The same record shape can hold a later trade, mining, refinery, or blueprint
+action. `NextPlanner` does not call a provider. It does not use an AI model.
+Desktop and overlay surfaces do not bind to it yet.
 
 ### Mission Guides
 `GuideCatalog` is the single list of curated guide images. Each entry names a

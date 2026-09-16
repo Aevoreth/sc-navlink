@@ -59,7 +59,7 @@ public partial class MainViewModel : ObservableObject
         OnPropertyChanged(nameof(ResultsHiddenByFilter));
     }
 
-    public event Action<int>? OcrValueReceived;
+    public event Action<IReadOnlyList<int>>? OcrValuesReceived;
     public event Action<ScanPhase>? OcrPhaseReceived;
     public event Action<int>? OcrProgressReceived;
 
@@ -79,7 +79,7 @@ public partial class MainViewModel : ObservableObject
     public MainViewModel()
     {
         _scanner = new ScannerService();
-        _scanner.ValueDetected     += OnOcrValue;
+        _scanner.ValuesDetected    += OnOcrValues;
         _scanner.PhaseChanged      += p => OcrPhaseReceived?.Invoke(p);
         _scanner.CandidateProgress += count => OcrProgressReceived?.Invoke(count);
         _scanner.ScanTick          += OnScanTick;
@@ -125,40 +125,79 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void Lookup()
     {
-        if (!int.TryParse(RsInput.Trim().Replace(",", ""), out var rs)) return;
-        RunScan(rs, addToHistory: true);
+        var values = ParseRsInput(RsInput);
+        if (values.Count == 0) return;
+        RunScans(values, addToHistory: true);
     }
 
     public void RunScanNoHistory(int rs)
     {
         RsInput = rs.ToString();
-        RunScan(rs, addToHistory: false);
+        RunScans([rs], addToHistory: false);
     }
 
-    private void RunScan(int rs, bool addToHistory)
+    public void ApplyDecodedSignatures(IReadOnlyList<int> values)
+    {
+        if (values.Count == 0) return;
+        RsInput = string.Join(" ", values);
+        RunScans(values, addToHistory: true);
+    }
+
+    private void RunScan(int rs, bool addToHistory) => RunScans([rs], addToHistory);
+
+    private void RunScans(IReadOnlyList<int> values, bool addToHistory)
     {
         var cart = CartNames();
-        var matches = App.Data.FindByRs(rs);
         ScanResults.Clear();
-        foreach (var m in matches)
-            ScanResults.Add(new MatchResult(m.Resource, rs, m.Nodes, m.IsExact, m.ErrorPct)
-                { IsInCart = cart.Contains(m.Resource.Name) });
-
-        StatusText = matches.Count == 0 ? "No matches found" : "";
-
-        bool isNewScan = ScanHistory.Count == 0 || ScanHistory[0].Rs != rs;
-        RebuildFilteredResults();
-
-        if (addToHistory && isNewScan)
+        foreach (var rs in values)
         {
-            var (topName, matchKind) = ScanClassification.Summarize(matches);
-            ScanHistory.Insert(0, new ScanHistoryEntry(rs, topName, matchKind)
-                { IsInCart = cart.Contains(topName) });
-            while (ScanHistory.Count > 20) ScanHistory.RemoveAt(ScanHistory.Count - 1);
-            RebuildFilteredHistory();
+            var matches = App.Data.FindByRs(rs);
+            foreach (var m in matches)
+            {
+                ScanResults.Add(new MatchResult(m.Resource, rs, m.Nodes, m.IsExact, m.ErrorPct)
+                    { IsInCart = cart.Contains(m.Resource.Name) });
+            }
         }
 
-        PublishMiningScan(rs);
+        StatusText = ScanResults.Count == 0 ? "No matches found" : "";
+        RebuildFilteredResults();
+
+        if (addToHistory)
+        {
+            var recent = ScanHistory.Take(values.Count).Select(h => h.Rs).ToHashSet();
+            var added = false;
+            foreach (var rs in values)
+            {
+                if (recent.Contains(rs)) continue;
+                var matches = App.Data.FindByRs(rs);
+                var (topName, matchKind) = ScanClassification.Summarize(matches);
+                ScanHistory.Insert(0, new ScanHistoryEntry(rs, topName, matchKind)
+                    { IsInCart = cart.Contains(topName) });
+                recent.Add(rs);
+                added = true;
+            }
+            if (added)
+            {
+                while (ScanHistory.Count > 20) ScanHistory.RemoveAt(ScanHistory.Count - 1);
+                RebuildFilteredHistory();
+            }
+        }
+
+        PublishMiningScan(values[0]);
+    }
+
+    internal static IReadOnlyList<int> ParseRsInput(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return Array.Empty<int>();
+        var parts = text.Replace(",", "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        var values = new List<int>();
+        var seen = new HashSet<int>();
+        foreach (var part in parts)
+        {
+            if (int.TryParse(part, out var rs) && seen.Add(rs))
+                values.Add(rs);
+        }
+        return values;
     }
 
     private HashSet<string> CartNames() =>
@@ -166,7 +205,7 @@ public partial class MainViewModel : ObservableObject
 
     private void PublishMiningScan(int rs)
     {
-        var hits = ScanResults.Select(m => new GameMiningHit(
+        var hits = ScanResults.Where(m => m.InputRs == rs).Select(m => new GameMiningHit(
             m.Resource.Name, m.Resource.Method, m.Nodes, m.IsExact, m.ErrorPct)).ToArray();
         App.GameState.PublishMining(
             MiningScanProjection.FromScan(rs, hits, SnapshotMiningHistory(), DateTime.UtcNow));
@@ -323,13 +362,16 @@ public partial class MainViewModel : ObservableObject
     private static readonly string[] _spinFrames = ["|", "/", "-", "\\"];
     private DateTime _lastValueTime = DateTime.MinValue;
 
-    private void OnOcrValue(int value)
+    private void OnOcrValues(IReadOnlyList<int> values)
     {
+        if (values.Count == 0) return;
         _lastValueTime = DateTime.Now;
-        RsInput = value.ToString();
-        ScanStatusText = $"● {value:N0}";
-        Lookup();
-        OcrValueReceived?.Invoke(value);
+        RsInput = string.Join(" ", values);
+        ScanStatusText = values.Count == 1
+            ? $"● {values[0]:N0}"
+            : $"● {string.Join(" · ", values.Select(v => v.ToString("N0")))}";
+        ApplyDecodedSignatures(values);
+        OcrValuesReceived?.Invoke(values);
     }
 
     private void OnScanTick()
