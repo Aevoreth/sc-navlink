@@ -32,4 +32,7 @@ internal interface IMarketDataProvider
     Task<ProviderFetch<CatalogTradePrice>> FetchTradePricesAsync(CancellationToken ct);
     Task<ProviderFetch<CatalogYield>> FetchYieldsAsync(CancellationToken ct);
     Task<ProviderFetch<CatalogRefinedPrice>> FetchRefinedPricesAsync(int commodityId, CancellationToken ct);
+    Task<ProviderFetch<ShipCatalogEntry>> FetchVehiclesAsync(CancellationToken ct);
+    Task<ProviderFetch<CatalogVehiclePurchase>> FetchVehiclePurchasesAsync(CancellationToken ct);
+    Task<ProviderFetch<CatalogVehicleRental>> FetchVehicleRentalsAsync(CancellationToken ct);
 }

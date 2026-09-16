@@ -16,13 +16,13 @@ SC-navLink should reduce the need to coordinate separate hauling, trading, minin
 
 ## Current phase
 
-SC-navLink is completing the **0.1 Foundation** phase and preparing the **0.2 Operations & Route Core** phase.
-
-The `foundation/0.1` branch remains the integration branch until the foundation is formally closed out.
+SC-navLink is in the **0.2 Operations & Route Core** phase. The 0.1 foundation
+is complete on `foundation/0.1`. That branch remains the integration branch
+until an `operations/0.2` branch is created.
 
 GitHub issues define current task status and acceptance criteria. `docs/ROADMAP.md` defines milestone sequencing. This document defines product intent and long-lived project rules.
 
-The immediate planning focus after foundation closeout is to connect **Ships -> active ship/capacity -> CargoState -> RoutePlan -> NEXT -> Operations/Starmap/Overlay**.
+The immediate planning focus is **Ships -> active ship/capacity -> CargoState -> RoutePlan -> NEXT -> Operations/Starmap/Overlay**.
 
 ## Product model
 
@@ -156,7 +156,7 @@ Ships is a planned core module, not merely a later reference browser.
 
 Its initial tabs are:
 
-- **Ship Browser** — ship catalog/reference, flyable/concept filtering, role filters, cargo/price/location data;
+- **Ship Browser** — catalog cards, hull details on click, flyable/concept filtering, manufacturer and role chips, cargo/price/location data;
 - **My Hangar** — pledged, in-game purchased, and rented ships, including active-ship selection and rental/location state;
 - **Loadout Calculator** — component simulation and named saved loadouts, with deeper implementation allowed to land after the initial Ships foundation.
 

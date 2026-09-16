@@ -66,6 +66,7 @@ public partial class App : Application
     // Live UEX market data (the hourly fetch cycle + in-memory snapshot). Created right after
     // Update so the consent gate and throttle read real values; inert in the demo profile.
     public static MarketDataService Market { get; private set; } = null!;
+    public static ShipImageCache ShipImages { get; private set; } = null!;
 
     // SCT (SC Trade Tools) second-source cache. Inert unless Settings.Current.MarketDataEnabled
     // is true (owner-only Admin toggle, Task 9) - Start() itself checks the flag first.
@@ -136,6 +137,11 @@ public partial class App : Application
         Settings.Save();
         Logger.Info($"[UI] component labels: {ComponentLabelMode.Label(scope)} ({source})");
         ComponentLabelsChanged?.Invoke(scope, source);
+    }
+
+    public static void PublishActiveShip()
+    {
+        ActiveShipSync.Publish(GameState, Settings.Current.ActiveShipId, Data.GetHangarShips(), Market);
     }
 
     // Ghost mode (issue #27): single write path so the Settings page toggle, the rail's
@@ -373,6 +379,7 @@ public partial class App : Application
         // neither Nexus nor Star Citizen has focus.
         Market = new MarketDataService(Settings, () => App.IsForegroundRelevant);
         Market.Start();
+        ShipImages = new ShipImageCache();
 
         // SCT cache: fully inert unless market data is on (Start() checks it first). Constructed
         // unconditionally so the consent flow always has a live instance to call into, exactly
@@ -400,6 +407,7 @@ public partial class App : Application
         base.OnStartup(e);
         Data = new DataService(GameState);
         Data.Initialize();
+        PublishActiveShip();
 
         // Blueprint Network store (separate db, survives the nexus.db reseed).
         Network = new NetworkStore();

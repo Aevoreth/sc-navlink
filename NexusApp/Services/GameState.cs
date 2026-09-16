@@ -271,6 +271,26 @@ public sealed record GameGoalsState(
     }
 }
 
+/// <summary>How the active ship was confirmed. None means no hangar selection exists.</summary>
+public enum GameActiveShipProvenance { None, Hangar }
+
+/// <summary>
+/// Immutable active-ship slice published into <see cref="GameState"/>.
+///
+/// Disk (My Hangar + <c>AppSettings.ActiveShipId</c>) is the store of record. This snapshot is
+/// the live observation other modules read. It is not the hangar list and not a cargo inventory.
+/// <see cref="UsableCargoScu"/> is catalog/trade capacity until loadouts exist.
+/// </summary>
+public sealed record GameActiveShipState(
+    string? ShipId,
+    string? DisplayName,
+    int? UsableCargoScu,
+    GameActiveShipProvenance Provenance)
+{
+    public static GameActiveShipState Empty { get; } = new(null, null, null, GameActiveShipProvenance.None);
+    public bool HasShip => !string.IsNullOrWhiteSpace(ShipId);
+}
+
 /// <summary>
 /// App-lifetime observable operational state for SC-navLink.
 ///
@@ -290,6 +310,7 @@ public sealed class GameState
     private GameMiningState _mining = GameMiningState.Empty;
     private GameRefineryState _refinery = GameRefineryState.Empty;
     private GameGoalsState _goals = GameGoalsState.Empty;
+    private GameActiveShipState _activeShip = GameActiveShipState.Empty;
 
     /// <summary>Latest location snapshot. The returned record is immutable and safe to retain.</summary>
     public GameLocationState Location
@@ -354,6 +375,15 @@ public sealed class GameState
         }
     }
 
+    /// <summary>Latest active-ship snapshot. The returned record is immutable and safe to retain.</summary>
+    public GameActiveShipState ActiveShip
+    {
+        get
+        {
+            lock (_gate) return _activeShip;
+        }
+    }
+
     /// <summary>Latest durable-goals snapshot. The returned record is immutable and safe to retain.</summary>
     public GameGoalsState Goals
     {
@@ -390,6 +420,9 @@ public sealed class GameState
     /// <summary>Raised when the durable-goals snapshot changes.</summary>
     public event Action? GoalsChanged;
 
+    /// <summary>Raised when the active-ship snapshot changes.</summary>
+    public event Action? ActiveShipChanged;
+
     /// <summary>
     /// Publish the result of the location domain service. Internal so ordinary consumers cannot
     /// mutate shared operational state; writers live in the same service/domain assembly.
@@ -424,6 +457,10 @@ public sealed class GameState
     /// <summary>Publish the full durable-goals snapshot.</summary>
     internal void PublishGoals(GameGoalsState goals)
         => Publish(ref _goals, goals, () => GoalsChanged);
+
+    /// <summary>Publish the hangar-confirmed active ship and usable cargo capacity.</summary>
+    internal void PublishActiveShip(GameActiveShipState activeShip)
+        => Publish(ref _activeShip, activeShip, () => ActiveShipChanged);
 
     /// <summary>Replace the shopping list while keeping currently published owned blueprints.</summary>
     internal void PublishShopping(IReadOnlyList<GameShoppingItem> shopping)

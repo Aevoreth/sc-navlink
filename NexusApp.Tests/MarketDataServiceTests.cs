@@ -116,6 +116,25 @@ public class MarketDataServiceTests : IDisposable
         ],"message":""}
         """;
 
+    private const string VehiclesBody = """
+        {"status":"ok","data":[
+          {"id":10,"name":"100i","slug":"100i","company_name":"Origin Jumpworks","scu":2,
+           "is_spaceship":1,"is_cargo":1,"is_concept":0,"is_ground_vehicle":0}
+        ]}
+        """;
+
+    private const string VehiclePurchasesBody = """
+        {"status":"ok","data":[
+          {"id_vehicle":10,"id_terminal":300,"terminal_name":"New Babbage","price_buy":85000}
+        ]}
+        """;
+
+    private const string VehicleRentalsBody = """
+        {"status":"ok","data":[
+          {"id_vehicle":10,"id_terminal":300,"terminal_name":"New Babbage","price_rent":12000}
+        ]}
+        """;
+
     private static void SeedAll(FakeTransport t)
     {
         t.Responses[Url("game_versions")] = GameVersionsBody;
@@ -125,6 +144,9 @@ public class MarketDataServiceTests : IDisposable
         t.Responses[Url("commodities_prices_all")] = TradePricesAllBody;
         t.Responses[Url("refineries_yields")] = YieldsBody;
         t.Responses[Url("terminals")] = TerminalsBody;
+        t.Responses[Url("vehicles")] = VehiclesBody;
+        t.Responses[Url("vehicles_purchases_prices_all")] = VehiclePurchasesBody;
+        t.Responses[Url("vehicles_rentals_prices_all")] = VehicleRentalsBody;
     }
 
     private (MarketDataService svc, FakeTransport t, SettingsService settings, string snapshotPath) Make(
@@ -278,6 +300,11 @@ public class MarketDataServiceTests : IDisposable
         Assert.Equal(2, t.Requested.Count(u => u.StartsWith(Url("commodities_prices?"), StringComparison.Ordinal)));
         // The bulk trading-tab endpoint is a separate, single call, not folded into that count.
         Assert.Equal(1, t.CountOf(Url("commodities_prices_all")));
+        Assert.Equal(1, t.CountOf(Url("vehicles")));
+        Assert.Equal(1, t.CountOf(Url("vehicles_purchases_prices_all")));
+        Assert.Equal(1, t.CountOf(Url("vehicles_rentals_prices_all")));
+        Assert.Single(svc.Vehicles.Items);
+        Assert.Equal("100i", svc.Vehicles.Items[0].Id);
         Assert.Single(snap.TradePrices.Rows);
         Assert.Equal(11, snap.TradePrices.Rows[0].CommodityId);
         Assert.NotEqual(default, snap.TradePrices.FetchedUtc);

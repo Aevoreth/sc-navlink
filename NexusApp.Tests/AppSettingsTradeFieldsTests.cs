@@ -15,6 +15,8 @@ public class AppSettingsTradeFieldsTests
 
         Assert.Equal("planner", s.TradeActiveFlow);
         Assert.Equal("", s.TradeShipId);
+        Assert.Equal("", s.ActiveShipId);
+        Assert.Equal("browser", s.ShipsActiveFlow);
         Assert.Equal("", s.TradeOriginManual);
         Assert.Equal("LIVE", s.TradeStartManual);   // task 10: preserves the old FROM HERE default behavior
         Assert.Null(s.TradeCommodityFilter);        // issue #41: null = ANY, no commodity constraint

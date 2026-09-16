@@ -29,6 +29,9 @@ internal enum ProviderDataClass
     Yields,
     RawPrices,
     GameVersion,
+    Vehicles,
+    VehiclePurchases,
+    VehicleRentals,
 }
 
 /// <summary>A cached catalog query: domain rows plus fetch/observation clocks and freshness.</summary>

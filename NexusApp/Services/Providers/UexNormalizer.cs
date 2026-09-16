@@ -22,6 +22,18 @@ internal static class UexNormalizer
     public static CatalogYield Yield(MarketYieldRow r) =>
         new(r.TerminalId, r.CommodityId, r.BonusPct, r.BonusPctWeek, r.ModifiedUtc, r.TerminalName);
 
+    public static ShipCatalogEntry Vehicle(MarketVehicle v) =>
+        new(v.Id, v.Slug, v.Name, v.Manufacturer, v.Role, v.CargoScu, v.Crew, v.Mass, v.Length,
+            v.Beam, v.Height, v.IsConcept, v.IsGroundVehicle, v.IsSpaceship,
+            string.IsNullOrEmpty(v.StoreUrl) ? null : v.StoreUrl,
+            string.IsNullOrEmpty(v.PhotoUrl) ? null : v.PhotoUrl);
+
+    public static CatalogVehiclePurchase VehiclePurchase(MarketVehiclePurchase r) =>
+        new(r.VehicleId, r.TerminalId, r.TerminalName, r.PriceBuy);
+
+    public static CatalogVehicleRental VehicleRental(MarketVehicleRental r) =>
+        new(r.VehicleId, r.TerminalId, r.TerminalName, r.PriceRent);
+
     public static CatalogRawPrice RawPrice(MarketPriceRow r) =>
         new(r.TerminalId, r.CommodityId, r.Sell, r.SellAvgWeek, r.GameVersion, r.ModifiedUtc, r.TerminalName);
 

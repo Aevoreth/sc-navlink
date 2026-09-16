@@ -18,6 +18,9 @@ internal sealed class UexMarketProvider : IMarketDataProvider
     private const string YieldsEndpoint = "refineries_yields";
     private const string TerminalsEndpoint = "terminals";
     private const string CommoditiesPricesAllEndpoint = "commodities_prices_all";
+    private const string VehiclesEndpoint = "vehicles";
+    private const string VehiclePurchasesEndpoint = "vehicles_purchases_prices_all";
+    private const string VehicleRentalsEndpoint = "vehicles_rentals_prices_all";
 
     private readonly IMarketDataTransport _transport;
 
@@ -64,6 +67,24 @@ internal sealed class UexMarketProvider : IMarketDataProvider
         FetchArrayAsync(
             $"{BaseUrl}{RefinedPricesEndpoint}?id_commodity={commodityId}",
             (body, out skipped) => MarketParse.ParsePriceRows(body, out skipped).Select(UexNormalizer.RefinedPrice).ToList(),
+            ct);
+
+    public Task<ProviderFetch<ShipCatalogEntry>> FetchVehiclesAsync(CancellationToken ct) =>
+        FetchArrayAsync(
+            BaseUrl + VehiclesEndpoint,
+            (body, out skipped) => MarketParse.ParseVehicles(body, out skipped).Select(UexNormalizer.Vehicle).ToList(),
+            ct);
+
+    public Task<ProviderFetch<CatalogVehiclePurchase>> FetchVehiclePurchasesAsync(CancellationToken ct) =>
+        FetchArrayAsync(
+            BaseUrl + VehiclePurchasesEndpoint,
+            (body, out skipped) => MarketParse.ParseVehiclePurchases(body, out skipped).Select(UexNormalizer.VehiclePurchase).ToList(),
+            ct);
+
+    public Task<ProviderFetch<CatalogVehicleRental>> FetchVehicleRentalsAsync(CancellationToken ct) =>
+        FetchArrayAsync(
+            BaseUrl + VehicleRentalsEndpoint,
+            (body, out skipped) => MarketParse.ParseVehicleRentals(body, out skipped).Select(UexNormalizer.VehicleRental).ToList(),
             ct);
 
     private delegate List<T> ParseRows<T>(string body, out int skipped);

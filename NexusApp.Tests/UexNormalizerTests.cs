@@ -129,4 +129,23 @@ public class UexMarketProviderTests
         Assert.Empty(result.Rows);
         Assert.False(string.IsNullOrWhiteSpace(result.Error));
     }
+
+    [Fact]
+    public async Task FetchVehicles_NormalizesOkEnvelope()
+    {
+        var t = new FakeTransport
+        {
+            Responses =
+            {
+                [MarketDataService.BaseUrl + "vehicles"] =
+                    """{"status":"ok","data":[{"id":10,"name":"100i","slug":"100i","company_name":"Origin Jumpworks","scu":2,"is_spaceship":1,"is_cargo":1}]}"""
+            }
+        };
+        var provider = new UexMarketProvider(t);
+        var result = await provider.FetchVehiclesAsync(CancellationToken.None);
+        Assert.True(result.Ok);
+        var row = Assert.Single(result.Rows);
+        Assert.Equal("100i", row.Id);
+        Assert.Equal(2, row.CargoScu);
+    }
 }
