@@ -42,7 +42,8 @@ public partial class MainWindow
     // visuals (left strip, ✓ tick, hover pill) in place - so one toggle updates the
     // row without rebuilding the whole list.
     private readonly Dictionary<string, Action<bool>> _bpRowOwned = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly string[] _bpCategories = ["Armor", "Weapons", "Ship Components", "Ammo"];
+    private List<string> BrowseCategories() =>
+        BlueprintCatalog.CategoriesFrom(_allBlueprints ?? []).ToList();
 
     private void InitBlueprintBrowse()
     {
@@ -372,7 +373,7 @@ public partial class MainWindow
             default: // root
             {
                 var cards = 0;
-                foreach (var cat in _bpCategories)
+                foreach (var cat in BrowseCategories())
                 {
                     var c = CatCount(cat);
                     if (_bpOwnFilter != BpOwnFilter.All && c == 0) continue;   // hide empties when filtered
@@ -830,7 +831,7 @@ public partial class MainWindow
         BlueprintDetailPanel.Children.Add(new TextBlock { Text = $"{pct}%", FontFamily = headFont, FontSize = 48, FontWeight = FontWeights.Bold, Foreground = accent, Margin = new Thickness(2, 4, 0, 0) });
         BlueprintDetailPanel.Children.Add(new TextBlock { Text = "Mark blueprints as Owned as you unlock them in-game - your manifest fills in here.", FontSize = 12, Foreground = dim, Margin = new Thickness(2, 2, 0, 18), TextWrapping = TextWrapping.Wrap, MaxWidth = 540, HorizontalAlignment = HorizontalAlignment.Left });
 
-        foreach (var cat in _bpCategories)
+        foreach (var cat in BrowseCategories())
         {
             int catTotal = all.Count(b => b.Category == cat);
             int catOwned = all.Count(b => b.Category == cat && App.Settings.IsBlueprintOwned(b.Name));

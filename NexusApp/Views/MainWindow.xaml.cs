@@ -137,7 +137,7 @@ public partial class MainWindow : Window
         InitCodexSellToggle();
         _vm = new MainViewModel();
         DataContext = _vm;
-        _vm.OcrValueReceived    += v => { _overlay?.ReceiveOcrValue(v); _scanIndicator?.FlashGreen(); };
+        _vm.OcrValuesReceived   += v => { _overlay?.ReceiveOcrValues(v); _scanIndicator?.FlashGreen(); };
         _vm.OcrPhaseReceived    += p => _overlay?.ReceiveScanPhase(p);
         _vm.OcrProgressReceived += c => _overlay?.ReceiveScanProgress(c);
 

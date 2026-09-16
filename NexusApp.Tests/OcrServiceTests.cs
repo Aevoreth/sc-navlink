@@ -16,13 +16,10 @@ public class OcrServiceTests
     // -- comma/period stripping between digits ("17,200"/"17.200" -> "17200") --
     [InlineData("RS DECODER 17,200 CREDITS", 17200)]
     [InlineData("RS DECODER 17.200 CREDITS", 17200)]
-    // -- thousands-separator regex collapse: "X XXX" -> "XXXX", but ONLY a single leading digit --
+    // -- thousands-separator regex collapse: 1-3 leading digits + space + exactly 3 digits --
     [InlineData("value 5 000 detected", 5000)]
-    // Documented current-behavior limit (not adjusted to "fix"): the collapse regex is
-    // "(?<!\d)(\d) (\d{3})(?!\d)" - exactly one digit before the space. A two-digit thousands
-    // group misread with a space ("17 200" standing in for 17,200) does NOT collapse, so the two
-    // halves ("17", "200") are each under the 4-digit minimum and the call returns null.
-    [InlineData("value 17 200 detected", null)]
+    [InlineData("value 17 200 detected", 17200)]
+    [InlineData("value 18 500 detected", 18500)]
     // -- 2000-200000 bounds: acceptance at both ends --
     [InlineData("value 2000 detected", 2000)]
     [InlineData("value 200000 detected", 200000)]
@@ -37,5 +34,58 @@ public class OcrServiceTests
     public void ExtractRsValue_PinsCurrentBehavior(string ocrText, int? expected)
     {
         Assert.Equal(expected, OcrService.ExtractRsValue(ocrText));
+    }
+
+    [Fact]
+    public void ExtractRsValues_OneSignature_MatchesExtractRsValue()
+    {
+        var text = "RS DECODER 17,200 CREDITS";
+        Assert.Equal(new[] { 17200 }, OcrService.ExtractRsValues(text));
+        Assert.Equal(17200, OcrService.ExtractRsValue(text));
+    }
+
+    [Fact]
+    public void ExtractRsValues_TwoSignaturesOnOneLine_AreDistinct()
+    {
+        Assert.Equal(new[] { 17200, 45000 }, OcrService.ExtractRsValues("17200 45000"));
+    }
+
+    [Fact]
+    public void ExtractRsValues_ThreeSignaturesOnSeparateLines_KeepOrder()
+    {
+        var text = "17200\n45000\n8000";
+        Assert.Equal(new[] { 17200, 45000, 8000 }, OcrService.ExtractRsValues(text));
+        Assert.Equal(17200, OcrService.ExtractRsValue(text));
+    }
+
+    [Fact]
+    public void ExtractRsValues_DuplicateOnSameFrame_IsOnce()
+    {
+        Assert.Equal(new[] { 17200 }, OcrService.ExtractRsValues("17200\n17200"));
+    }
+
+    [Fact]
+    public void ExtractRsValues_ThreeConcatenatedSignatures_AreSplit()
+    {
+        Assert.Equal(new[] { 17200, 45000, 8000 }, OcrService.ExtractRsValues("17200450008000"));
+        Assert.Equal(17200, OcrService.ExtractRsValue("17200450008000"));
+    }
+
+    [Fact]
+    public void ExtractRsValues_TwoConcatenatedSignatures_AreSplit()
+    {
+        Assert.Equal(new[] { 17200, 45000 }, OcrService.ExtractRsValues("1720045000"));
+    }
+
+    [Fact]
+    public void ExtractRsValues_HudCommaStack_DropsSubFloorAndKeepsValid()
+    {
+        // In-game stacked scan pills: 5,291 / 18,500 / 1,328. 1328 is under the 2000 floor
+        // and must not wipe the other two, whether OCR keeps commas, turns them into spaces,
+        // or concatenates the three into one digit run.
+        Assert.Equal(new[] { 5291, 18500 }, OcrService.ExtractRsValues("5,291\n18,500\n1,328"));
+        Assert.Equal(new[] { 5291, 18500 }, OcrService.ExtractRsValues("5 291 18 500 1 328"));
+        Assert.Equal(new[] { 5291, 18500 }, OcrService.ExtractRsValues("5291185001328"));
+        Assert.Equal(new[] { 5291, 18500 }, OcrService.SplitLongDigitRun("5291185001328"));
     }
 }

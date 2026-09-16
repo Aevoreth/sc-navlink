@@ -1405,12 +1405,18 @@ public partial class OverlayWindow : Window
         Logger.Info($"[WIN] Overlay ghost rail scale: {old:0.##} -> {k:0.##}");
     }
 
-    public void ReceiveOcrValue(int value)
+    public void ReceiveOcrValue(int value) => ReceiveOcrValues([value]);
+
+    public void ReceiveOcrValues(IReadOnlyList<int> values)
     {
-        OverlayRsInput.Text = value.ToString("N0");
-        OverlayScanStatus.Text = $"◎  Auto-scanned: {value:N0}";
+        if (values.Count == 0) return;
+        OverlayRsInput.Text = string.Join("  ", values.Select(v => v.ToString("N0")));
+        OverlayScanStatus.Text = values.Count == 1
+            ? $"◎  Auto-scanned: {values[0]:N0}"
+            : $"◎  Auto-scanned: {string.Join(" · ", values.Select(v => v.ToString("N0")))}";
         OverlayScanStatus.Foreground = (System.Windows.Media.SolidColorBrush)System.Windows.Application.Current.FindResource("AccentBrush");
-        RunScan(value);
+        OverlayResults.ItemsSource = _vm.FilteredScanResults;
+        ApplyExactAutoExpand();
     }
 
     public void ReceiveScanPhase(ScanPhase phase)
@@ -1837,16 +1843,8 @@ public partial class OverlayWindow : Window
 
     private void RunScanFromInput()
     {
-        var text = OverlayRsInput.Text.Replace(",", "").Trim();
-        if (int.TryParse(text, out var rs)) RunScan(rs);
-    }
-
-    private void RunScan(int rs)
-    {
-        _vm.RsInput = rs.ToString();
+        _vm.RsInput = OverlayRsInput.Text;
         _vm.LookupCommand.Execute(null);
-        // The FILTERED live collection (issue #34: the pills govern live results too). Assigning
-        // the ObservableCollection itself keeps cart-toggle and filter rebuilds flowing in.
         OverlayResults.ItemsSource = _vm.FilteredScanResults;
         ApplyExactAutoExpand();
     }

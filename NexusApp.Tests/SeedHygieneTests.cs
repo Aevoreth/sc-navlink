@@ -1,4 +1,5 @@
 using System.Text.Json;
+using NexusApp.Services;
 using Xunit;
 
 namespace NexusApp.Tests;
@@ -112,6 +113,46 @@ public class SeedHygieneTests
             "Stampede Module", "Torrent III Module",
         })
             Assert.True(names.Contains(required), $"recovered recipe missing from seed: {required}");
+    }
+
+    [Fact]
+    public void BrowseCategories_IncludeEverySeedCategory()
+    {
+        using var doc = SeedTestFixture.LoadSeed();
+        var blueprints = new List<NexusApp.Models.Blueprint>();
+        var seedCats = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var b in Blueprints(doc))
+        {
+            var name = b.GetProperty("name").GetString() ?? "";
+            var cat = b.GetProperty("category").GetString() ?? "";
+            blueprints.Add(new NexusApp.Models.Blueprint { Name = name, Category = cat });
+            if (cat.Length > 0) seedCats.Add(cat);
+        }
+
+        var browse = BlueprintCatalog.CategoriesFrom(blueprints);
+        foreach (var cat in seedCats)
+            Assert.Contains(cat, browse);
+        Assert.Contains("Mission Items", browse);
+        Assert.True(blueprints.Count >= 1589, $"seed catalog shrank: {blueprints.Count}");
+    }
+
+    [Fact]
+    public void CannonSearchWouldExceedTheOldFiftyRowCap()
+    {
+        using var doc = SeedTestFixture.LoadSeed();
+        var cannon = Blueprints(doc).Count(b =>
+            (b.GetProperty("name").GetString() ?? "").Contains("Cannon", StringComparison.OrdinalIgnoreCase));
+        Assert.True(cannon > 50, $"expected more than 50 Cannon recipes so LIMIT 50 is a real cap; got {cannon}");
+    }
+
+    [Fact]
+    public void DataServiceSearch_DoesNotCapResults()
+    {
+        var src = SourceFiles.ReadAppSource(@"Services\DataService.cs");
+        var method = src.Substring(src.IndexOf("public List<Blueprint> SearchBlueprints", StringComparison.Ordinal));
+        method = method.Substring(0, method.IndexOf("public List<Blueprint> GetAllBlueprints", StringComparison.Ordinal));
+        Assert.DoesNotContain("LIMIT 50", method, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("LIMIT ", method, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

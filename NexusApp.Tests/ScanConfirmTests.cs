@@ -44,7 +44,7 @@ public class ScanConfirmTests
         c.Update(1234, true);
         Assert.Equal(1234, c.Update(1234, true));   // confirmed once already
 
-        int? onReset = c.Update(null, false);       // pin lost - clears pending/pendingCount/lastEmitted
+        int? onReset = c.Update((int?)null, false);       // pin lost - clears pending/pendingCount/lastEmitted
         Assert.Null(onReset);
         Assert.Equal(0, c.PendingCount);
 
@@ -64,5 +64,60 @@ public class ScanConfirmTests
         int? repeat2 = c.Update(1234, true);
         Assert.Null(repeat1);
         Assert.Null(repeat2);
+    }
+
+    [Fact]
+    public void TwoSignatures_ConfirmIndependently()
+    {
+        var c = new ScanConfirm();
+        Assert.Empty(c.Update([1234, 5678], true));
+        var newly = c.Update([1234, 5678], true);
+
+        Assert.Equal(new[] { 1234, 5678 }, newly);
+        Assert.Equal(new[] { 1234, 5678 }, c.ConfirmedVisible);
+    }
+
+    [Fact]
+    public void UnstableSecondSignature_DoesNotResetConfirmedFirst()
+    {
+        var c = new ScanConfirm();
+        c.Update([1234], true);
+        Assert.Equal(new[] { 1234 }, c.Update([1234], true));
+
+        Assert.Empty(c.Update([1234, 5678], true));
+        Assert.Equal(new[] { 1234 }, c.ConfirmedVisible);
+        Assert.Equal(1, c.PendingCount);
+
+        var newly = c.Update([1234, 9999], true);
+        Assert.Empty(newly);
+        Assert.Equal(new[] { 1234 }, c.ConfirmedVisible);
+        Assert.Equal(1, c.PendingCount);
+
+        newly = c.Update([1234, 9999], true);
+        Assert.Equal(new[] { 9999 }, newly);
+        Assert.Equal(new[] { 1234, 9999 }, c.ConfirmedVisible);
+    }
+
+    [Fact]
+    public void ThreeSignatures_ConfirmWithoutCollapsing()
+    {
+        var c = new ScanConfirm();
+        var first = new[] { 2200, 4800, 17300 };
+        Assert.Empty(c.Update(first, true));
+        Assert.Equal(first, c.Update(first, true));
+        Assert.Equal(first, c.ConfirmedVisible);
+    }
+
+    [Fact]
+    public void EmptyReadingWithPin_DoesNotResetPending()
+    {
+        var c = new ScanConfirm();
+        c.Update([2200, 4800, 17300], true);
+        Assert.Equal(1, c.PendingCount);
+
+        Assert.Empty(c.Update(Array.Empty<int>(), true));
+        Assert.Equal(1, c.PendingCount);
+
+        Assert.Equal(new[] { 2200, 4800, 17300 }, c.Update([2200, 4800, 17300], true));
     }
 }

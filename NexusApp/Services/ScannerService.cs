@@ -14,7 +14,7 @@ public class ScannerService : IDisposable
     private ScanPhase _currentPhase = ScanPhase.Watching;
     private DateTime _lastBeat;   // throttles the [SCAN] capture heartbeat (see OnTick)
 
-    public event Action<int>? ValueDetected;
+    public event Action<IReadOnlyList<int>>? ValuesDetected;
     public event Action<ScanPhase>? PhaseChanged;
     public event Action<int>? CandidateProgress;
     public event Action? ScanTick;
@@ -65,27 +65,25 @@ public class ScannerService : IDisposable
 
             try
             {
-                var (val, pinFound) = await _ocr.ScanFullScreenAsync();
-                var confirmed = _confirm.Update(val, pinFound);
+                var (values, pinFound) = await _ocr.ScanFullScreenAsync();
+                var newly = _confirm.Update(values, pinFound);
 
                 if (pinFound)
                 {
-                    if (val.HasValue)
+                    if (_confirm.ConfirmedVisible.Count > 0)
                     {
-                        if (confirmed.HasValue)
-                        {
-                            App.Current.Dispatcher.Invoke(() => ValueDetected?.Invoke(confirmed.Value));
-                            EmitPhase(ScanPhase.Decoded);
-                        }
-                        else if (_confirm.PendingCount < 2)
-                        {
-                            EmitPhase(ScanPhase.PinFound);
-                            App.Current.Dispatcher.Invoke(() => CandidateProgress?.Invoke(_confirm.PendingCount));
-                        }
+                        if (newly.Count > 0)
+                            App.Current.Dispatcher.Invoke(() => ValuesDetected?.Invoke(_confirm.ConfirmedVisible));
+                        EmitPhase(ScanPhase.Decoded);
+                    }
+                    else if (_confirm.PendingCount > 0)
+                    {
+                        EmitPhase(ScanPhase.PinFound);
+                        App.Current.Dispatcher.Invoke(() => CandidateProgress?.Invoke(_confirm.PendingCount));
                     }
                     else
                     {
-                        EmitPhase(ScanPhase.PinFound);
+                        EmitPhase(_ocr.LastScanHadRegion ? ScanPhase.Watching : ScanPhase.NoRegion);
                     }
                 }
                 else
