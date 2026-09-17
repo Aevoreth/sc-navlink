@@ -77,6 +77,7 @@ public partial class OverlayWindow : Window
     private readonly Action _onMarketChanged;
     private readonly Action _onLocationChanged;
     private readonly Action _onWalletChanged;
+    private readonly Action _onPresentationChanged;
 
     public OverlayWindow(MainViewModel vm)
     {
@@ -270,8 +271,17 @@ public partial class OverlayWindow : Window
             // The HUB Location LED (F14) updates regardless of the presented tab: the write is a
             // text + brush set, and keeping it current means tab entry never shows a stale place.
             RefreshHubLocation();
+            if (IsTabPresented("stats")) FillHubNext();
         });
         App.Locations.Changed += _onLocationChanged;
+
+        _onPresentationChanged = () => Dispatcher.BeginInvoke(() =>
+        {
+            if (IsTabPresented("stats")) FillHubNext();
+        });
+        App.GameState.RouteChanged += _onPresentationChanged;
+        App.GameState.ActiveShipChanged += _onPresentationChanged;
+        App.GameState.CargoChanged += _onPresentationChanged;
 
         // Foreground gating: when neither Nexus nor Star Citizen is in front, OCR auto-scans pause.
         // Re-sync the HUB scan LEDs so they flip to/from the yellow paused state as that happens.
@@ -2497,6 +2507,9 @@ public partial class OverlayWindow : Window
         if (App.Wallet != null) App.Wallet.Changed -= _onWalletChanged;
         App.Market.Changed -= _onMarketChanged;
         App.Locations.Changed -= _onLocationChanged;
+        App.GameState.RouteChanged -= _onPresentationChanged;
+        App.GameState.ActiveShipChanged -= _onPresentationChanged;
+        App.GameState.CargoChanged -= _onPresentationChanged;
         App.ForegroundRelevanceChanged -= OnForegroundRelevanceChanged;
         App.ContractScan.RunningChanged -= SyncContractFromShared;
         App.ContractScan.StageChanged -= OnContractStageChanged;
@@ -2629,6 +2642,23 @@ public partial class OverlayWindow : Window
         => Dispatcher.Invoke(() => { _contractBoxVisible = App.ContractBoxVisible; SyncHaulingControls(); });
     private void OnContractBoxShared(bool on) => SyncContractFromShared();
 
+    private void FillHubNext()
+    {
+        var view = RouteNextProjection.From(App.GameState);
+        HubNextValue.Text = OverlayHub.NextValue(view);
+        HubNextSub.Text = OverlayHub.NextSub(view);
+        HubNextComplete.Tag = view.Primary;
+        HubNextComplete.Visibility = OverlayHub.CanCompleteHaulStep(view.Primary)
+            ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void HubNextComplete_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        InteractionLog.Click("task complete", HubNextComplete);
+        App.Hauls.TryCompleteNext(HubNextComplete.Tag as NextAction);
+    }
+
     private void RebuildStatsPanel()
     {
         // Server / Shard section sits in the STATS tab; refresh it whenever the tab is built.
@@ -2650,6 +2680,7 @@ public partial class OverlayWindow : Window
         HubRefSub.Text = OverlayHub.RefinerySub(ready, refining);
         TickHubCells();
         RefreshSessionLed();
+        FillHubNext();
 
         // LEDGER: wallet + session profit, the main tab's derivations.
         FillHubLedger();
@@ -2926,8 +2957,8 @@ public partial class OverlayWindow : Window
         HaulingList.Children.Add(stopsHeader);
 
         var con = App.Hauls.BuildConsolidation();
-        AddStopGroup("COLLECT", con.Pickups);
-        AddStopGroup("DELIVER", con.Dropoffs);
+        AddStopGroup("COLLECT", HaulRole.Pickup, con.Pickups);
+        AddStopGroup("DELIVER", HaulRole.Dropoff, con.Dropoffs);
 
         // ── CONTRACTS: per-contract identity + payout, collapsible (collapse by default when busy) ──
         var cards = new StackPanel();
@@ -3110,9 +3141,24 @@ public partial class OverlayWindow : Window
     private TextBlock HaulRow(string text, Brush brush, double indent)
         => new() { Text = text, FontFamily = (FontFamily)FindResource("MonoFont"), FontSize = 11, Foreground = brush, Margin = new Thickness(indent, 2, 0, 0), TextWrapping = TextWrapping.Wrap };
 
+    private UIElement OverlayTaskRow(string text, Brush brush, double indent, Action complete)
+    {
+        var row = new Grid { Margin = new Thickness(0, 1, 0, 1) };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var line = HaulRow(text, brush, indent);
+        line.Margin = new Thickness(indent, 2, 6, 0);
+        Grid.SetColumn(line, 0); row.Children.Add(line);
+        var btn = Hud.TaskCompleteButton(complete, compact: true);
+        btn.VerticalAlignment = VerticalAlignment.Center;
+        Grid.SetColumn(btn, 1); row.Children.Add(btn);
+        return row;
+    }
+
     // A consolidated stop group (COLLECT or DELIVER): each location with its total SCU and a per-commodity
     // breakdown (commodity, summed SCU, and how many contracts a single placement there clears).
-    private void AddStopGroup(string label, System.Collections.Generic.List<ConsolidationStop> stops)
+    // Click a commodity line to mark those remaining stops done so NEXT advances.
+    private void AddStopGroup(string label, HaulRole role, System.Collections.Generic.List<ConsolidationStop> stops)
     {
         if (stops.Count == 0) return;
         var accent = (Brush)FindResource("AccentBrush");
@@ -3137,10 +3183,27 @@ public partial class OverlayWindow : Window
             // Per-commodity mini-lines: "Titanium  120 SCU (2)" where (2) = contracts contributing.
             var groups = stop.Items
                 .GroupBy(i => string.IsNullOrWhiteSpace(i.Commodity) ? "Cargo" : i.Commodity)
-                .Select(g => new { Commodity = g.Key, Scu = g.Sum(i => i.Scu), Count = g.Count() })
+                .Select(g => new { Commodity = g.Key, Scu = g.Sum(i => i.Scu), Count = g.Count(), Items = g.ToList() })
                 .OrderByDescending(g => g.Scu);
             foreach (var g in groups)
-                HaulingList.Children.Add(new TextBlock { Text = $"{g.Commodity}  {g.Scu} SCU ({g.Count})", FontFamily = mono, FontSize = 10, Foreground = dim, Margin = new Thickness(18, 1, 0, 0), TextWrapping = TextWrapping.Wrap });
+            {
+                var items = g.Items;
+                var location = stop.Location;
+                var line = new Grid { Margin = new Thickness(18, 1, 0, 1) };
+                line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                var name = new TextBlock
+                {
+                    Text = $"{g.Commodity}  {g.Scu} SCU ({g.Count})", FontFamily = mono, FontSize = 10, Foreground = dim,
+                    TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0),
+                };
+                Grid.SetColumn(name, 0); line.Children.Add(name);
+                var btn = Hud.TaskCompleteButton(
+                    () => App.Hauls.SetStopsCompleted(items.Select(i => (i.MissionId, role, (string?)location, (string?)i.Commodity))),
+                    compact: true);
+                Grid.SetColumn(btn, 1); line.Children.Add(btn);
+                HaulingList.Children.Add(line);
+            }
         }
     }
 
@@ -3211,11 +3274,15 @@ public partial class OverlayWindow : Window
         {
             foreach (var o in h.ContractObjectives)
             {
-                var pickup  = string.IsNullOrWhiteSpace(o.Pickup)  ? "?" : o.Pickup;
-                var dropoff = string.IsNullOrWhiteSpace(o.Dropoff) ? "?" : o.Dropoff;
-                var cargo   = ((o.Scu > 0 ? $"{o.Scu} SCU " : "") + o.Commodity).Trim();
-                card.Children.Add(HaulRow(cargo.Length == 0 ? "(cargo unknown)" : cargo, fg, 8));
-                card.Children.Add(HaulRow($"{pickup} -> {dropoff}", dim, 16));
+                var cargo = ((o.Scu > 0 ? $"{o.Scu} SCU " : "") + o.Commodity).Trim();
+                if (cargo.Length > 0)
+                    card.Children.Add(HaulRow(cargo, fg, 8));
+                if (!string.IsNullOrWhiteSpace(o.Pickup) && !HaulTracker.ObjectivePickupComplete(h, o))
+                    card.Children.Add(OverlayTaskRow($"Collect from {o.Pickup}", dim, 16,
+                        () => App.Hauls.SetStopCompleted(missionId, HaulRole.Pickup, o.Pickup, o.Commodity, completed: true)));
+                if (!string.IsNullOrWhiteSpace(o.Dropoff) && !HaulTracker.ObjectiveDropoffComplete(h, o))
+                    card.Children.Add(OverlayTaskRow($"Deliver to {o.Dropoff}", dim, 16,
+                        () => App.Hauls.SetStopCompleted(missionId, HaulRole.Dropoff, o.Dropoff, o.Commodity, completed: true)));
             }
         }
         else
@@ -3225,12 +3292,19 @@ public partial class OverlayWindow : Window
                 if (leg.Completed) continue;
                 var role = leg.Role == HaulRole.Pickup ? "Collect" : "Deliver";
                 var location = leg.Role == HaulRole.Dropoff ? leg.Destination : h.PickupName;
+                var commodity = leg.Commodity;
+                if (string.IsNullOrWhiteSpace(commodity) && leg.Role == HaulRole.Pickup)
+                {
+                    var sib = h.Legs.Find(l => l.Role == HaulRole.Dropoff && l.CargoKey == leg.CargoKey);
+                    commodity = sib?.Commodity ?? "";
+                }
                 var segs = new System.Collections.Generic.List<string>();
                 if (leg.TargetScu > 0) segs.Add($"{leg.TargetScu} SCU");
-                if (!string.IsNullOrWhiteSpace(leg.Commodity)) segs.Add(leg.Commodity);
+                if (!string.IsNullOrWhiteSpace(commodity)) segs.Add(commodity);
                 if (!string.IsNullOrWhiteSpace(location)) segs.Add($"@ {location}");
                 var desc = string.Join(" ", segs);
-                card.Children.Add(new TextBlock { Text = desc.Length == 0 ? $"{role}:" : $"{role}: {desc}", FontSize = 11, Foreground = fg, Margin = new Thickness(8, 3, 0, 0), TextWrapping = TextWrapping.Wrap });
+                card.Children.Add(OverlayTaskRow(desc.Length == 0 ? $"{role}:" : $"{role}: {desc}", fg, 8,
+                    () => App.Hauls.SetStopCompleted(missionId, leg.Role, location, commodity, completed: true)));
             }
         }
 

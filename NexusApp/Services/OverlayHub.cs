@@ -42,4 +42,23 @@ public static class OverlayHub
     /// <summary>HANGAR mini sub: which way the door is moving plus the countdown.</summary>
     public static string HangarSub(bool isOpen, string countdown)
         => (isOpen ? "closes " : "opens ") + countdown;
+
+    /// <summary>HUB NEXT headline. The primary title when a recommendation exists; otherwise
+    /// the planner's honest empty summary. Overlay width is tight, so this is one line.</summary>
+    public static string NextValue(RouteNextView view)
+        => view.Primary?.Title ?? view.NextSummary;
+
+    /// <summary>HUB NEXT sub: place plus confidence, or the remaining-route status when idle.</summary>
+    public static string NextSub(RouteNextView view)
+    {
+        if (view.Primary is { } primary)
+            return primary.Location + " · " + view.ConfidenceLabel;
+        return view.StatusLabel;
+    }
+
+    /// <summary>Task Complete is only for remaining haul collect/deliver steps.</summary>
+    public static bool CanCompleteHaulStep(NextAction? action) =>
+        action is not null
+        && !string.IsNullOrWhiteSpace(action.MissionId)
+        && (action.Kind is NextActionKind.HaulPickup or NextActionKind.HaulDropoff);
 }

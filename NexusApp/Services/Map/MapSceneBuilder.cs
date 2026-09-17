@@ -36,6 +36,20 @@ public sealed record MapLayerPins(
         OrdersByObject ?? new Dictionary<int, IReadOnlyList<string>>();
 }
 
+/// <summary>
+/// Shared operation polyline for the starmap (0.2 presentation). Distinct from MAP draft
+/// <c>ids</c> and Trade planner pairs. Unresolved stops are already omitted by
+/// <see cref="MapLayers.BuildOperationRoute"/>.
+/// </summary>
+public sealed record MapOperationRoute(
+    IReadOnlyList<int> Ids,
+    int? Current,
+    int? Next)
+{
+    public static MapOperationRoute Empty { get; } = new(Array.Empty<int>(), null, null);
+    public bool HasStops => Ids.Count > 0;
+}
+
 // Pure C# bridge payload builders for the MAP tab's WebView2 scene (Web/map/index.html). Every
 // method serializes one of the page's inbound message shapes (init, layerToggle, select,
 // focusObject, routeChanged, plannerRoute, measureArm, systemView) via JsonSerializer.Serialize of
@@ -54,7 +68,7 @@ public static class MapSceneBuilder
         int? selection, IReadOnlyList<int> draft, IReadOnlyList<int> planner, bool reduced,
         int? player = null, bool haulsOn = false, bool ordersOn = false,
         bool lite = false, string? playerNote = null, string? playerName = null,
-        bool playerLive = true)
+        bool playerLive = true, MapOperationRoute? operation = null)
     {
         var rows = catalog.Objects
             .Where(o => string.Equals(o.System, system, StringComparison.OrdinalIgnoreCase))
@@ -104,6 +118,9 @@ public static class MapSceneBuilder
             // Two liveness states on every location surface (2026-08-17): with no live session the
             // page renders the marker and the locator card as a grey LAST KNOWN reading.
             playerLive,
+            // Shared RoutePlan polyline. Empty when the locator (lite) or a page with no
+            // operation is posting. Distinct from draft and planner — those stay Trade/MAP tools.
+            operation = OpPayload(operation),
         };
         return JsonSerializer.Serialize(payload);
     }
@@ -122,6 +139,15 @@ public static class MapSceneBuilder
 
     public static string BuildPlanner(IReadOnlyList<int> ids) =>
         JsonSerializer.Serialize(new { type = "plannerRoute", ids });
+
+    public static string BuildOperationRoute(MapOperationRoute route) =>
+        JsonSerializer.Serialize(new
+        {
+            type = "operationRoute",
+            ids = route.Ids,
+            current = route.Current,
+            next = route.Next,
+        });
 
     public static string BuildMeasureArm(bool on) =>
         JsonSerializer.Serialize(new { type = "measureArm", on });
@@ -158,5 +184,11 @@ public static class MapSceneBuilder
             total += d;
         }
         return (legs, total);
+    }
+
+    private static object OpPayload(MapOperationRoute? operation)
+    {
+        var op = operation ?? MapOperationRoute.Empty;
+        return new { ids = op.Ids, current = op.Current, next = op.Next };
     }
 }

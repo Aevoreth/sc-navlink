@@ -51,7 +51,9 @@ public class StopBoardTests
 
         Assert.Equal(2, board.Count);
         Assert.Equal(StopAction.Collect, board[0].Entries.Single().Action);
+        Assert.Equal("m1", board[0].Entries.Single().MissionId);
         Assert.Equal(StopAction.Deliver, board[1].Entries.Single().Action);
+        Assert.Equal("m1", board[1].Entries.Single().MissionId);
     }
 
     [Fact]

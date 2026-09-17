@@ -16,14 +16,15 @@ namespace NexusApp.Views;
 /// <summary>
 /// Operations system-view layout (redesign 2026-08-10).
 ///
-/// <para>The left column runs live to durable to spatial: three job cards, blueprint coverage, then
-/// the system view at the foot. The right column leads with the shard, because which shard you are
-/// on is the fact that invalidates everything under it, then the wallet with the money that moved,
-/// then session profit with its history.</para>
+/// <para>The left column runs live to durable to spatial: NEXT, three job cards, blueprint
+/// coverage, then the system view at the foot. The right column leads with the shard, because
+/// which shard you are on is the fact that invalidates everything under it, then ship/hold and
+/// remaining route, then the wallet with the money that moved, then session profit with its
+/// history.</para>
 ///
-/// <para>Every list on this page comes from <see cref="OperationsPanels"/>, which is pure and
-/// tested. This file only turns those rows into controls, so a layout defect can never be a maths
-/// defect.</para>
+/// <para>Shard, profit, and wallet lists come from <see cref="OperationsPanels"/>. NEXT, ship,
+/// and remaining route come from <see cref="RouteNextProjection"/>. This file only turns those
+/// rows into controls, so a layout defect can never be a maths defect.</para>
 /// </summary>
 public sealed partial class CommandPage
 {
@@ -58,7 +59,8 @@ public sealed partial class CommandPage
     // permanent, the map slot inside it is populated exactly once, and Refresh only swaps the
     // panels around it. Everything above the body still rebuilds wholesale, as it always did.
     private Grid? _bodyGrid;
-    private readonly ContentControl _jobSlot = new();
+    private readonly ContentControl _nextSlot = new();
+    private readonly ContentControl _jobSlot = new() { Margin = new Thickness(0, 12, 0, 0) };
     private readonly ContentControl _coverageSlot = new() { Margin = new Thickness(0, 12, 0, 0) };
     private readonly StackPanel _rightCol = new() { Margin = new Thickness(8, 0, 0, 0) };
 
@@ -76,14 +78,17 @@ public sealed partial class CommandPage
         var left = new Grid { Margin = new Thickness(0, 0, 8, 0) };
         left.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         left.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        left.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         left.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star), MinHeight = 240 });
-        Grid.SetRow(_jobSlot, 0);
+        Grid.SetRow(_nextSlot, 0);
+        left.Children.Add(_nextSlot);
+        Grid.SetRow(_jobSlot, 1);
         left.Children.Add(_jobSlot);
-        Grid.SetRow(_coverageSlot, 1);
+        Grid.SetRow(_coverageSlot, 2);
         left.Children.Add(_coverageSlot);
         var map = MapSlot();
         map.Margin = new Thickness(0, 12, 0, 0);
-        Grid.SetRow(map, 2);
+        Grid.SetRow(map, 3);
         left.Children.Add(map);
         Grid.SetColumn(left, 0);
         _bodyGrid.Children.Add(left);
@@ -103,11 +108,18 @@ public sealed partial class CommandPage
     /// <summary>Refills the permanent frame. Everything except the map slot is rebuilt.</summary>
     private void FillSystemViewBody()
     {
+        _nextSlot.Content = NextHero();
         _jobSlot.Content = JobStrip();
         _coverageSlot.Content = CoverageCard();
 
         _rightCol.Children.Clear();
         _rightCol.Children.Add(ShardPanel());
+        var ship = ShipHoldPanel();
+        ship.Margin = new Thickness(0, 12, 0, 0);
+        _rightCol.Children.Add(ship);
+        var route = RouteRemainingPanel();
+        route.Margin = new Thickness(0, 12, 0, 0);
+        _rightCol.Children.Add(route);
         var wallet = WalletPanel();
         wallet.Margin = new Thickness(0, 12, 0, 0);
         _rightCol.Children.Add(wallet);
@@ -118,6 +130,99 @@ public sealed partial class CommandPage
         // The scene is initialized once on Ready; after that only a location change repaints it,
         // and PostLocator's own token guard is what keeps a data tick from resending the init.
         PostLocator(force: false);
+    }
+
+    // ── NEXT hero (0.2 presentation): primary action from NextPlanner via RouteNextProjection ──
+    private FrameworkElement NextHero()
+    {
+        var view = RouteNextProjection.From(App.GameState);
+        var nav = view.Primary?.Module == NextModule.Trade ? "trade" : "hauling";
+        var value = view.Primary?.Title ?? view.NextSummary;
+        var sub = view.Primary is { } p
+            ? p.Location + " · " + view.ConfidenceLabel
+            : view.ConfidenceLabel;
+        var explain = view.Primary?.Explanation ?? view.NextSummary;
+
+        var sp = new StackPanel();
+        var head = new Grid();
+        head.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        head.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var label = new StackPanel { Orientation = Orientation.Horizontal };
+        label.Children.Add(ModuleIcon("operations"));
+        label.Children.Add(new TextBlock
+        {
+            Text = "NEXT", FontFamily = Ui, FontSize = 10, FontWeight = FontWeights.Bold,
+            Foreground = Br("FgDimBrush"), VerticalAlignment = VerticalAlignment.Center,
+        });
+        head.Children.Add(label);
+        var chip = Hud.Chip(Color.FromRgb(0x7F, 0xE9, 0xE0), view.ConfidenceLabel.ToUpperInvariant());
+        Grid.SetColumn(chip, 1);
+        head.Children.Add(chip);
+        sp.Children.Add(head);
+
+        sp.Children.Add(new TextBlock
+        {
+            Text = value, FontFamily = Disp, FontSize = 22, FontWeight = FontWeights.Bold,
+            Foreground = Br("CyanBrush"), Margin = new Thickness(0, 8, 0, 0),
+            TextWrapping = TextWrapping.Wrap,
+        });
+        sp.Children.Add(new TextBlock
+        {
+            Text = explain, FontFamily = Ui, FontSize = 12, Foreground = Br("FgBrush"),
+            Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap,
+        });
+        sp.Children.Add(new TextBlock
+        {
+            Text = sub, FontFamily = Ui, FontSize = 11, Foreground = Br("FgDimBrush"),
+            Margin = new Thickness(0, 4, 0, 0), TextWrapping = TextWrapping.Wrap,
+        });
+        if (OverlayHub.CanCompleteHaulStep(view.Primary))
+        {
+            var complete = Hud.TaskCompleteButton(() => App.Hauls.TryCompleteNext(view.Primary));
+            complete.Margin = new Thickness(0, 10, 0, 0);
+            sp.Children.Add(complete);
+        }
+
+        var panel = LitCard(sp, chamfer: 12, padding: new Thickness(16, 14, 16, 14));
+        WireNav(panel, "Operations: NEXT card", nav);
+        return panel;
+    }
+
+    private FrameworkElement ShipHoldPanel()
+    {
+        var view = RouteNextProjection.From(App.GameState);
+        var sp = new StackPanel();
+        sp.Children.Add(PanelHead("SHIP / HOLD", "Open ships", "ships", ModuleIcon("ships")));
+        sp.Children.Add(new TextBlock
+        {
+            Text = view.ShipLabel, FontFamily = Ui, FontSize = 17, FontWeight = FontWeights.SemiBold,
+            Foreground = Br("CyanBrush"), TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+        sp.Children.Add(new TextBlock
+        {
+            Text = view.HoldLabel, FontFamily = Ui, FontSize = 11, Foreground = Br("FgDimBrush"),
+            Margin = new Thickness(0, 3, 0, 0), TextWrapping = TextWrapping.Wrap,
+        });
+        return LitCard(sp, chamfer: 14, padding: new Thickness(18));
+    }
+
+    private FrameworkElement RouteRemainingPanel()
+    {
+        var view = RouteNextProjection.From(App.GameState);
+        var sp = new StackPanel();
+        sp.Children.Add(PanelHead("ROUTE", "Open map", "map", ModuleIcon("map")));
+        sp.Children.Add(new TextBlock
+        {
+            Text = view.StatusLabel, FontFamily = Ui, FontSize = 17, FontWeight = FontWeights.SemiBold,
+            Foreground = Br("CyanBrush"), TextTrimming = TextTrimming.CharacterEllipsis,
+        });
+        sp.Children.Add(new TextBlock
+        {
+            Text = view.LegLabel ?? "No current-to-next leg.",
+            FontFamily = Ui, FontSize = 11, Foreground = Br("FgDimBrush"),
+            Margin = new Thickness(0, 3, 0, 0), TextWrapping = TextWrapping.Wrap,
+        });
+        return LitCard(sp, chamfer: 14, padding: new Thickness(18));
     }
 
     // ── three job cards: the live work, one line each ────────────────────────────────────────────
@@ -958,12 +1063,21 @@ public sealed partial class CommandPage
         panel.Cursor = System.Windows.Input.Cursors.Hand;
         panel.MouseEnter += (_, _) => frame.Fill = Br("HighlightBrush");
         panel.MouseLeave += (_, _) => frame.Fill = restFill;
-        panel.MouseLeftButtonUp += (_, _) =>
+        panel.MouseLeftButtonUp += (_, e) =>
         {
+            if (e.OriginalSource is DependencyObject src && FindAncestor<Button>(src) is not null)
+                return;
             InteractionLog.Nav(logLabel, panel);
             _navigate(nav);
         };
     }
 
     private UIElement IconLayers() => Icon("M8,2 L1,5.5 L8,9 L15,5.5 Z M1,10 L8,13.5 L15,10");
+
+    private static T? FindAncestor<T>(DependencyObject start) where T : DependencyObject
+    {
+        for (var d = start; d != null; d = VisualTreeHelper.GetParent(d))
+            if (d is T match) return match;
+        return null;
+    }
 }

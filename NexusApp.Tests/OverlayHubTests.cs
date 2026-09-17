@@ -46,4 +46,38 @@ public class OverlayHubTests
     [InlineData(false, "12:04", "opens 12:04")]
     public void HangarSub_SaysWhichWayTheDoorMoves(bool open, string cd, string expected)
         => Assert.Equal(expected, OverlayHub.HangarSub(open, cd));
+
+    [Fact]
+    public void NextValue_UsesPrimaryTitle()
+    {
+        var state = new GameState();
+        state.PublishLocation(new GameLocationState("Everus Harbor", null, null, false,
+            DateTime.Parse("2026-09-16T18:00:00Z").ToUniversalTime()));
+        state.PublishRoute(RoutePlanMathTests.MixedThree());
+        var view = RouteNextProjection.From(state);
+        Assert.Equal(view.Primary!.Title, OverlayHub.NextValue(view));
+        Assert.StartsWith("Everus Harbor", OverlayHub.NextSub(view));
+        Assert.Contains("At this stop", OverlayHub.NextSub(view));
+    }
+
+    [Fact]
+    public void NextValue_EmptyState_UsesHonestSummary()
+    {
+        var view = RouteNextProjection.From(new GameState());
+        Assert.Equal("No hauling stop is known.", OverlayHub.NextValue(view));
+        Assert.Equal("No route", OverlayHub.NextSub(view));
+    }
+
+    [Fact]
+    public void CanCompleteHaulStep_OnlyHaulCollectOrDeliver()
+    {
+        var haul = new NextAction(
+            NextModule.Hauling, NextActionKind.HaulPickup, "Collect 8 SCU Carbon",
+            "Everus Harbor", "Carbon", 8, "mid", 1, 400, "Collect.", NextConfidence.Observed,
+            Array.Empty<string>());
+        var buy = haul with { Kind = NextActionKind.TradeBuy, Module = NextModule.Trade };
+        Assert.True(OverlayHub.CanCompleteHaulStep(haul));
+        Assert.False(OverlayHub.CanCompleteHaulStep(buy));
+        Assert.False(OverlayHub.CanCompleteHaulStep(null));
+    }
 }

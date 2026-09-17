@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using NexusApp.Models;
+using NexusApp.Services;
 using NexusApp.Services.Map;
 using Xunit;
 
@@ -204,5 +205,68 @@ public class MapLayersLiveStateTests
 
         Assert.Empty(pins.Hauls);
         Assert.Empty(pins.Orders);
+    }
+
+    // ---- BuildOperationRoute (0.2 presentation) -----------------------------------------------
+
+    [Fact]
+    public void BuildOperationRoute_ResolvesKnownStopsInOrder()
+    {
+        var plan = RoutePlanMath.Build(new[]
+        {
+            RoutePlanMathTests.Stop("s1", RealPlace,
+                RoutePlanMathTests.Act("a1", GameRouteActionKind.Pickup, "Laranite", 8)),
+            RoutePlanMathTests.Stop("s2", SecondPlace,
+                RoutePlanMathTests.Act("a2", GameRouteActionKind.Delivery, "Laranite", 8)),
+        });
+
+        var op = MapLayers.BuildOperationRoute(plan, Map);
+        var everus = Map.ByName("Stanton", RealPlace)!;
+        var tressler = Map.ByName("Stanton", SecondPlace)!;
+        Assert.Equal(new[] { everus.Id, tressler.Id }, op.Ids);
+        Assert.Equal(everus.Id, op.Current);
+        Assert.Equal(tressler.Id, op.Next);
+    }
+
+    [Fact]
+    public void BuildOperationRoute_UnresolvableStopIsOmitted_NotGuessed()
+    {
+        var plan = RoutePlanMath.Build(new[]
+        {
+            RoutePlanMathTests.Stop("s1", RealPlace,
+                RoutePlanMathTests.Act("a1", GameRouteActionKind.Pickup, "Laranite", 8)),
+            RoutePlanMathTests.Stop("s2", "Pickup (TBD)",
+                RoutePlanMathTests.Act("a2", GameRouteActionKind.Delivery, "Laranite", 8)),
+        });
+
+        var op = MapLayers.BuildOperationRoute(plan, Map);
+        var everus = Map.ByName("Stanton", RealPlace)!;
+        Assert.Equal(new[] { everus.Id }, op.Ids);
+        Assert.Equal(everus.Id, op.Current);
+        Assert.Null(op.Next);
+    }
+
+    [Fact]
+    public void BuildOperationRoute_SkippedStopStaysOffTheLine()
+    {
+        var plan = RoutePlanMath.WithStopSkipped(RoutePlanMath.Build(new[]
+        {
+            RoutePlanMathTests.Stop("s1", RealPlace,
+                RoutePlanMathTests.Act("a1", GameRouteActionKind.Pickup, "Laranite", 8)),
+            RoutePlanMathTests.Stop("s2", SecondPlace,
+                RoutePlanMathTests.Act("a2", GameRouteActionKind.Delivery, "Laranite", 8)),
+        }), "s1");
+
+        var op = MapLayers.BuildOperationRoute(plan, Map);
+        var tressler = Map.ByName("Stanton", SecondPlace)!;
+        Assert.Equal(new[] { tressler.Id }, op.Ids);
+        Assert.Equal(tressler.Id, op.Current);
+        Assert.Null(op.Next);
+    }
+
+    [Fact]
+    public void BuildOperationRoute_EmptyPlan_IsEmpty()
+    {
+        Assert.Equal(MapOperationRoute.Empty, MapLayers.BuildOperationRoute(GameRoutePlan.Empty, Map));
     }
 }

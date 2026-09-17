@@ -60,6 +60,7 @@ public sealed class MapPage : UserControl
     private readonly List<int> _draft = new();
     private List<int> _plannerIds = new();
     private List<(int Buy, int Sell)>? _plannerPushed;   // M-1 idempotency guard: the terminal-id pairs last pushed to the scene, so MainWindow re-pushing the same pins (or "no pins") on every MAP activation is a no-op
+    private MapOperationRoute _operation = MapOperationRoute.Empty;
     private bool _measureArmed;
     private (string A, string B, double Meters)? _measureResult;
     private bool _sceneReady;
@@ -95,6 +96,14 @@ public sealed class MapPage : UserControl
     private StackPanel _locContent = null!;
     private StackPanel _locNameRow = null!;
     private Border _jumpToMeBtn = null!;
+
+    // ── OPERATION zone (shared RoutePlan remaining work, 0.2 presentation) ──
+    private TextBlock _opEmptyText = null!;
+    private StackPanel _opContent = null!;
+    private TextBlock _opStatusText = null!;
+    private TextBlock _opLegText = null!;
+    private TextBlock _opCurrentText = null!;
+    private TextBlock _opNextText = null!;
 
     private TextBlock _hintText = null!;
     private TextBlock _emptyText = null!;
@@ -268,6 +277,7 @@ public sealed class MapPage : UserControl
         // Work orders come through RefreshLiveLayers instead, called by the host on its own
         // collection-changed subscription - this page cannot see that collection.
         App.Hauls.Changed += () => Dispatcher.BeginInvoke(() => { if (IsVisible) RefreshLiveLayers(); });
+        App.GameState.RouteChanged += () => Dispatcher.BeginInvoke(() => { if (IsVisible) RefreshOperation(); });
 
         RefreshSystemPills();
         RefreshLayerCounts();
@@ -276,6 +286,7 @@ public sealed class MapPage : UserControl
         RefreshMeasureZone();
         UpdateHangarTimer();
         RefreshPlayerLocation();   // resolve on load (design: opening the tab never auto-focuses, it only resolves+shows)
+        RefreshOperation();
     }
 
     /// <summary>Called by MainWindow every time the dock activates this page.</summary>
@@ -284,6 +295,7 @@ public sealed class MapPage : UserControl
         Logger.Info("[UI] map: tab open");
         RefreshMarketDelta();
         RefreshPlayerLocation();   // catches a live location change that happened while this tab was hidden, same reasoning as RefreshMarketDelta above
+        RefreshOperation();
     }
 
     /// <summary>B7: repaints when the market consent answer flips underneath this page. MainWindow's
@@ -425,7 +437,7 @@ public sealed class MapPage : UserControl
         _scene.PostJson(MapSceneBuilder.BuildInit(_catalog, _system, _pins,
             _tradeOn, _guidesOn, _miningOn, _hangarOn, _asteroidsOn,
             _selection, _draft, _plannerIds, Motion.Reduced, _playerLocation?.Id, _haulsOn, _ordersOn,
-            playerLive: App.GameLogFeed.IsSessionLive));
+            playerLive: App.GameLogFeed.IsSessionLive, operation: _operation));
     }
 
     // ── player marker (design a/b/c) ──
@@ -457,6 +469,22 @@ public sealed class MapPage : UserControl
         Logger.Info(resolved != null
             ? $"[UI] map: player marker {resolved.Name} ({resolved.System})" + (live ? "" : " (last known)")
             : "[UI] map: player marker cleared");
+    }
+
+    /// <summary>
+    /// Shared RoutePlan remaining work (0.2 presentation). Resolves stop labels the same way
+    /// MY HAULS pins do. Unresolved names stay on the panel and off the polyline.
+    /// </summary>
+    private void RefreshOperation()
+    {
+        var resolved = MapLayers.BuildOperationRoute(App.GameState.Route, _catalog);
+        bool changed = !_operation.Ids.SequenceEqual(resolved.Ids)
+            || _operation.Current != resolved.Current
+            || _operation.Next != resolved.Next;
+        _operation = resolved;
+        if (_sceneReady && changed)
+            _scene.PostJson(MapSceneBuilder.BuildOperationRoute(_operation));
+        RefreshOperationZone();
     }
 
     /// <summary>JUMP TO ME (design b): switches system first when the resolved location is not the
@@ -732,6 +760,7 @@ public sealed class MapPage : UserControl
         stack.Children.Add(BuildSearchZone());
         stack.Children.Add(BuildSystemZone());
         stack.Children.Add(BuildLocationZone());
+        stack.Children.Add(BuildOperationZone());
         stack.Children.Add(BuildLayersZone());
         stack.Children.Add(BuildSelectionZone());
         stack.Children.Add(BuildRouteZone());
@@ -1035,6 +1064,64 @@ public sealed class MapPage : UserControl
 
         stack.Children.Add(content);
         return Zone("LOCATION", stack);
+    }
+
+    private UIElement BuildOperationZone()
+    {
+        var stack = new StackPanel();
+        _opEmptyText = new TextBlock
+        {
+            Text = "No shared route.",
+            FontFamily = Hud.Font("UiFont"), FontSize = 11, Foreground = Hud.Br("FgDimBrush"),
+            TextWrapping = TextWrapping.Wrap,
+        };
+        stack.Children.Add(_opEmptyText);
+
+        var content = new StackPanel { Visibility = Visibility.Collapsed };
+        _opContent = content;
+        _opStatusText = new TextBlock
+        {
+            FontFamily = Hud.Font("UiFont"), FontSize = 11, FontWeight = FontWeights.SemiBold,
+            Foreground = Hud.Br("CyanBrush"), TextWrapping = TextWrapping.Wrap,
+        };
+        content.Children.Add(_opStatusText);
+        _opLegText = new TextBlock
+        {
+            FontFamily = Hud.Font("UiFont"), FontSize = 12.5, FontWeight = FontWeights.SemiBold,
+            Foreground = Hud.Br("FgBrush"), Margin = new Thickness(0, 4, 0, 0),
+            TextWrapping = TextWrapping.Wrap,
+        };
+        content.Children.Add(_opLegText);
+        _opCurrentText = new TextBlock
+        {
+            FontFamily = Hud.Font("UiFont"), FontSize = 11, Foreground = Hud.Br("FgDimBrush"),
+            Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap,
+        };
+        content.Children.Add(_opCurrentText);
+        _opNextText = new TextBlock
+        {
+            FontFamily = Hud.Font("UiFont"), FontSize = 11, Foreground = Hud.Br("FgDimBrush"),
+            Margin = new Thickness(0, 2, 0, 0), TextWrapping = TextWrapping.Wrap,
+        };
+        content.Children.Add(_opNextText);
+        stack.Children.Add(content);
+        return Zone("OPERATION", stack);
+    }
+
+    private void RefreshOperationZone()
+    {
+        var view = RouteNextProjection.From(App.GameState);
+        bool empty = view.Status is GameRouteStatus.Empty or GameRouteStatus.Complete
+            && view.RemainingStopCount == 0;
+        _opEmptyText.Text = view.Status == GameRouteStatus.Complete ? "Route complete." : "No shared route.";
+        _opEmptyText.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
+        _opContent.Visibility = empty ? Visibility.Collapsed : Visibility.Visible;
+        if (empty) return;
+
+        _opStatusText.Text = view.StatusLabel;
+        _opLegText.Text = view.LegLabel ?? view.CurrentLabel ?? view.StatusLabel;
+        _opCurrentText.Text = view.CurrentLabel is { } cur ? "Current  " + cur : "Current  —";
+        _opNextText.Text = view.NextLabel is { } next ? "Next  " + next : "Next  —";
     }
 
     // Same-system: name only (the marker is already visible in the current view - design b calls

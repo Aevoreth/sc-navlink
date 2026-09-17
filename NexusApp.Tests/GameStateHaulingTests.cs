@@ -198,4 +198,23 @@ public class GameStateHaulingTests
         Assert.Equal(158, pickup.Scu);
         Assert.Equal("Carbon", pickup.Commodity);
     }
+
+    [Fact]
+    public void SetStopCompleted_ReseedsRouteWithoutPickup()
+    {
+        var state = new GameState();
+        using var tracker = new HaulTracker(gameState: state);
+        tracker.Ingest(E(HaulLogParserFixtures.MarkerPickup));
+        tracker.Ingest(E(HaulLogParserFixtures.MarkerDropoff));
+        tracker.Ingest(E(HaulLogParserFixtures.DeliverLine));
+        tracker.Ingest(E(HaulLogParserFixtures.AcceptRouteLine));
+        Assert.Equal(2, state.Route.Stops.Count);
+
+        Assert.True(tracker.SetStopCompleted(Mid, HaulRole.Pickup, "Ruin Station", "Carbon", true));
+
+        Assert.Empty(state.Hauling.Pickups);
+        var stop = Assert.Single(state.Route.Stops);
+        Assert.Equal("Jackson's Swap", stop.Location.Label);
+        Assert.Equal(GameRouteActionKind.Delivery, Assert.Single(stop.Actions).Kind);
+    }
 }

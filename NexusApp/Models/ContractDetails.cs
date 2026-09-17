@@ -7,6 +7,10 @@ public sealed class ContractObjective
     public int Scu { get; init; }
     public string Pickup { get; init; } = "";    // "Collect X from <pickup>"
     public string Dropoff { get; init; } = "";   // "Deliver N SCU of X to <dropoff>"
+    // Session-only: the player marked this collect/deliver done (Game.log does not always
+    // fire ObjectiveCompleted, and the OCR path used to ignore completed log legs).
+    public bool PickupCompleted { get; set; }
+    public bool DropoffCompleted { get; set; }
 }
 
 // A hauling contract's full detail, parsed from the Contracts panel. No player identity.

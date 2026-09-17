@@ -55,12 +55,25 @@ public class HaulTrackerTests
     }
 
     [Fact]
-    public void ObjectiveCompleted_MarksLegDone()
+    public void ObjectiveCompleted_Pickup_DoesNotAdvanceRemainingWork()
     {
         var t = new HaulTracker();
         t.Ingest(E(MarkerPickup));
         t.Ingest(E(PickupCompleted));
+        Assert.False(t.ActiveHauls[0].Legs[0].Completed);
+        Assert.Single(t.BuildConsolidation().Pickups);
+    }
+
+    [Fact]
+    public void ObjectiveCompleted_Dropoff_MarksLegDone()
+    {
+        var t = new HaulTracker();
+        t.Ingest(E(MarkerDropoff));
+        t.Ingest(E(DeliverLine));
+        t.Ingest(E(PickupCompleted.Replace("pickup_6e9335e8-f62e-4eca-8fc5-a42ab1c3ab7d_0",
+                                           "dropoff_6e9335e8-f62e-4eca-8fc5-a42ab1c3ab7d_0")));
         Assert.True(t.ActiveHauls[0].Legs[0].Completed);
+        Assert.Empty(t.BuildConsolidation().Dropoffs);
     }
 
     [Fact]
@@ -195,5 +208,122 @@ public class HaulTrackerTests
         t.Remove(Mid);                                        // remove a6c598e0...
         var h = Assert.Single(t.AllHauls);
         Assert.Equal("6b4e3396-1506-4051-b348-79c4eabae9d9", h.MissionId);
+    }
+
+    private static ContractDetails RedWindCarbonOcr() => ContractParser.Parse(
+        "PRIMARY OBJECTIVES x Ä 139,250 N/A Red Wind Linehaul [50/200 Rep] Need a Hauler DETAILS " +
+        "O Deliver 0/158 SCU of Carbon to Jackson's Swap. o Collect Carbon from Ruin Station. TRACK")!;
+
+    private void SeedCarbonHaul(HaulTracker t)
+    {
+        t.Ingest(E(MarkerPickup));
+        t.Ingest(E(MarkerDropoff));
+        t.Ingest(E(DeliverLine));
+        t.Ingest(E(HaulLogParserFixtures.AcceptRouteLine));
+    }
+
+    [Fact]
+    public void SetStopCompleted_UnknownMission_ReturnsFalse()
+    {
+        var t = new HaulTracker();
+        SeedCarbonHaul(t);
+        Assert.False(t.SetStopCompleted("ffffffff-0000-0000-0000-000000000000",
+            HaulRole.Pickup, "Ruin Station", "Carbon", true));
+        Assert.Single(t.BuildConsolidation().Pickups);
+    }
+
+    [Fact]
+    public void SetStopCompleted_Pickup_LeavesDropoffRemaining()
+    {
+        var t = new HaulTracker();
+        SeedCarbonHaul(t);
+        Assert.True(t.SetStopCompleted(Mid, HaulRole.Pickup, "Ruin Station", "Carbon", true));
+
+        Assert.Empty(t.BuildConsolidation().Pickups);
+        var drop = Assert.Single(t.BuildConsolidation().Dropoffs);
+        Assert.Equal("Jackson's Swap", drop.Location);
+        Assert.True(t.ActiveHauls[0].Legs.Find(l => l.Role == HaulRole.Pickup)!.Completed);
+        Assert.False(t.ActiveHauls[0].Legs.Find(l => l.Role == HaulRole.Dropoff)!.Completed);
+    }
+
+    [Fact]
+    public void SetStopCompleted_CanReopenPickup()
+    {
+        var t = new HaulTracker();
+        SeedCarbonHaul(t);
+        Assert.True(t.SetStopCompleted(Mid, HaulRole.Pickup, "Ruin Station", "Carbon", true));
+        Assert.True(t.SetStopCompleted(Mid, HaulRole.Pickup, "Ruin Station", "Carbon", false));
+        Assert.Single(t.BuildConsolidation().Pickups);
+        Assert.False(t.ActiveHauls[0].Legs.Find(l => l.Role == HaulRole.Pickup)!.Completed);
+    }
+
+    [Fact]
+    public void Consolidation_OcrPath_IgnoresLogPickupComplete()
+    {
+        var t = new HaulTracker();
+        SeedCarbonHaul(t);
+        t.ApplyContractDetails(RedWindCarbonOcr());
+        Assert.Single(t.BuildConsolidation().Pickups);
+
+        t.Ingest(E(PickupCompleted));
+
+        var pickup = Assert.Single(t.BuildConsolidation().Pickups);
+        Assert.Equal("Ruin Station", pickup.Location);
+        Assert.Single(t.BuildConsolidation().Dropoffs);
+    }
+
+    [Fact]
+    public void Consolidation_OcrMissingCollect_FallsBackToLogPickup()
+    {
+        var t = new HaulTracker();
+        SeedCarbonHaul(t);
+        t.ApplyContractDetails(ContractParser.Parse(
+            "PRIMARY OBJECTIVES x Ä 139,250 N/A Red Wind Linehaul Deliver 0/158 SCU of Carbon to Jackson's Swap.")!);
+
+        var pickup = Assert.Single(t.BuildConsolidation().Pickups);
+        Assert.Equal("Ruin Station", pickup.Location);
+        Assert.Equal("Carbon", pickup.Items[0].Commodity);
+        Assert.Single(t.BuildConsolidation().Dropoffs);
+    }
+
+    [Fact]
+    public void TryCompleteNext_Pickup_AdvancesToDropoff()
+    {
+        var t = new HaulTracker();
+        SeedCarbonHaul(t);
+        var next = new NextAction(
+            NextModule.Hauling, NextActionKind.HaulPickup, "Collect 158 SCU Carbon",
+            "Ruin Station", "Carbon", 158, Mid, 1, 400, "Collect.", NextConfidence.Observed,
+            Array.Empty<string>());
+
+        Assert.True(t.TryCompleteNext(next));
+        Assert.Empty(t.BuildConsolidation().Pickups);
+        Assert.Single(t.BuildConsolidation().Dropoffs);
+    }
+
+    [Fact]
+    public void SetStopCompleted_OcrPickup_AdvancesWithoutLogComplete()
+    {
+        var t = new HaulTracker();
+        SeedCarbonHaul(t);
+        t.ApplyContractDetails(RedWindCarbonOcr());
+        Assert.True(t.SetStopCompleted(Mid, HaulRole.Pickup, "Ruin Station", "Carbon", true));
+
+        Assert.True(Assert.Single(t.ActiveHauls[0].ContractObjectives).PickupCompleted);
+        Assert.Empty(t.BuildConsolidation().Pickups);
+        Assert.Single(t.BuildConsolidation().Dropoffs);
+    }
+
+    [Fact]
+    public void Enrich_Rescan_PreservesManualPickupComplete()
+    {
+        var t = new HaulTracker();
+        SeedCarbonHaul(t);
+        t.ApplyContractDetails(RedWindCarbonOcr());
+        t.SetStopCompleted(Mid, HaulRole.Pickup, "Ruin Station", "Carbon", true);
+        t.ApplyContractDetails(RedWindCarbonOcr());
+
+        Assert.True(Assert.Single(t.ActiveHauls[0].ContractObjectives).PickupCompleted);
+        Assert.Empty(t.BuildConsolidation().Pickups);
     }
 }

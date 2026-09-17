@@ -128,8 +128,8 @@
             <Grid Grid.Row="3">
 
                 <!-- HUB tab, VITALS layout (2026-08-16 redesign, mock overlay-operations O2): the
-                     approved system-view language at overlay scale. Order = session line, 3-up mini
-                     job cards (gold refinery / amber auto load / green hangar - the same fixed tones
+                     approved system-view language at overlay scale. Order = session line, NEXT
+                     strip (shared RoutePlan / NextPlanner), 3-up mini job cards (gold refinery / amber auto load / green hangar - the same fixed tones
                      the main Operations tab wears), LEDGER (wallet + session profit + bars),
                      SERVER / SHARD, COLLECTION LOG. One vertical scroll, like the mock's .body.
                      Panels are FLAT (Bg2Nav fill + the .16 cyan lit edge), same reasoning as
@@ -144,6 +144,31 @@
                         <!-- Session line: LED + LIVE/OFFLINE + channel left, location right.
                              Built in code-behind (BuildHubSessionLine). -->
                         <Grid x:Name="HubSessionHost" Margin="1,0,1,9"/>
+
+                        <!-- NEXT strip (0.2 presentation): same RouteNextProjection as Operations. -->
+                        <views:ChamferPanel Chamfer="10" Padding="11,9" Margin="0,0,0,8"
+                                            Background="{DynamicResource Bg2NavBrush}" BorderBrush="#297FE9E0">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal">
+                                    <views:AnimatedDockIcon x:Name="HubIconNext" IconKey="operations"
+                                                            Width="12" Height="12" Margin="0,0,5,0"/>
+                                    <TextBlock Text="NEXT" FontSize="8.5" FontWeight="Bold"
+                                               Foreground="{DynamicResource FgDimBrush}" VerticalAlignment="Center"/>
+                                </StackPanel>
+                                <TextBlock x:Name="HubNextValue" FontFamily="{StaticResource DisplayFont}"
+                                           FontSize="13" FontWeight="Bold"
+                                           Foreground="{DynamicResource CyanBrush}" Margin="0,5,0,0"
+                                           TextWrapping="Wrap"/>
+                                <TextBlock x:Name="HubNextSub" FontSize="8" Foreground="{DynamicResource FgDimBrush}"
+                                           Margin="0,3,0,0" TextWrapping="Wrap"/>
+                                <Button x:Name="HubNextComplete" Content="Task Complete"
+                                        Style="{StaticResource NexusButton}"
+                                        FontSize="9" Padding="8,3" Margin="0,7,0,0"
+                                        HorizontalAlignment="Left" Visibility="Collapsed"
+                                        Click="HubNextComplete_Click"
+                                        ToolTip="Mark this suggested step done. NEXT will move to the next stop."/>
+                            </StackPanel>
+                        </views:ChamferPanel>
 
                         <!-- 3-up mini job cards. Values are set in RebuildStatsPanel; the two
                              countdowns tick on the HUB's own 1Hz timer (stats-tab scoped). -->
