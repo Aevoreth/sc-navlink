@@ -370,6 +370,7 @@ public class GameStateCargoHaulingIsolationTests
 
         Assert.Single(state.Hauling.Hauls);
         Assert.Equal(GameCargoState.Empty, state.Cargo);
+        Assert.True(state.Route.HasStops);
     }
 
     [Fact]
@@ -384,6 +385,7 @@ public class GameStateCargoHaulingIsolationTests
         feed.HandleLogReset();
 
         Assert.Equal(GameHaulingState.Empty, state.Hauling);
+        Assert.Equal(GameRoutePlan.Empty, state.Route);
         Assert.Equal("Carbon", Assert.Single(state.Cargo.Lots).Commodity);
         Assert.Equal(8, state.Cargo.UsedScu);
     }
@@ -400,6 +402,7 @@ public class GameStateCargoHaulingIsolationTests
         tracker.Ingest(E(Join("pub_use1b_12030094_150")));
 
         Assert.Equal(GameHaulingState.Empty, state.Hauling);
+        Assert.Equal(GameRoutePlan.Empty, state.Route);
         Assert.Equal("Carbon", Assert.Single(state.Cargo.Lots).Commodity);
     }
 }

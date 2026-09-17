@@ -360,6 +360,7 @@ public sealed class HaulTracker : IDisposable
         if (_order.Count == 0)
         {
             GameState.PublishHauling(GameHaulingState.Empty);
+            RouteSync.PublishFromHauling(GameState);
             return;
         }
 
@@ -375,6 +376,7 @@ public sealed class HaulTracker : IDisposable
             hauls,
             FlattenStops(con.Pickups),
             FlattenStops(con.Dropoffs)));
+        RouteSync.PublishFromHauling(GameState);
     }
 
     private static GameHaulStop[] FlattenStops(List<ConsolidationStop> stops)

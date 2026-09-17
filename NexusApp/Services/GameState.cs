@@ -384,6 +384,7 @@ public sealed class GameState
     private GameGoalsState _goals = GameGoalsState.Empty;
     private GameActiveShipState _activeShip = GameActiveShipState.Empty;
     private GameCargoState _cargo = GameCargoState.Empty;
+    private GameRoutePlan _route = GameRoutePlan.Empty;
 
     /// <summary>Latest location snapshot. The returned record is immutable and safe to retain.</summary>
     public GameLocationState Location
@@ -475,6 +476,15 @@ public sealed class GameState
         }
     }
 
+    /// <summary>Latest shared route snapshot. The returned record is immutable and safe to retain.</summary>
+    public GameRoutePlan Route
+    {
+        get
+        {
+            lock (_gate) return _route;
+        }
+    }
+
     /// <summary>Raised when any shared-state slice changes.</summary>
     public event Action? Changed;
 
@@ -507,6 +517,9 @@ public sealed class GameState
 
     /// <summary>Raised when the carried-cargo snapshot changes.</summary>
     public event Action? CargoChanged;
+
+    /// <summary>Raised when the shared route snapshot changes.</summary>
+    public event Action? RouteChanged;
 
     /// <summary>
     /// Publish the result of the location domain service. Internal so ordinary consumers cannot
@@ -550,6 +563,10 @@ public sealed class GameState
     /// <summary>Publish the hangar-backed cargo believed to be aboard the active ship.</summary>
     internal void PublishCargo(GameCargoState cargo)
         => Publish(ref _cargo, cargo, () => CargoChanged);
+
+    /// <summary>Publish the shared ordered route for the current operation.</summary>
+    internal void PublishRoute(GameRoutePlan route)
+        => Publish(ref _route, route, () => RouteChanged);
 
     /// <summary>Replace the shopping list while keeping currently published owned blueprints.</summary>
     internal void PublishShopping(IReadOnlyList<GameShoppingItem> shopping)

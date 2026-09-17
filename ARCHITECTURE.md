@@ -35,7 +35,7 @@ app makes a network call.
 |  Network(File/Store/Scope) |                              |
 |  Update(Service/Verifier/Manifest/Notice) |               |
 |  Market(DataService/Catalog/Cache/UexProvider/Snapshot/Queries) |    |
-|  Ships(IShipCatalog/HangarStore/ShipImageCache) | CargoState | Guides | ExecHangar |    |
+|  Ships(IShipCatalog/HangarStore/ShipImageCache) | CargoState | RoutePlan | Guides | ExecHangar |    |
 |  Overlay(Tabs/GhostGeometry/GhostFootprints) |            |
 |  ScmdbImport(Parser/Plan) |                               |
 |  UiScaleService |                                         |
@@ -110,7 +110,7 @@ copy is necessary.
 Scan results and refinery work orders flow through the same view model. So they
 stay consistent everywhere. The view model publishes decoded mining scans into
 `GameState`. It does not keep a second live copy of location, session, shard,
-hauling, wallet, goals, active ship, or cargo.
+hauling, wallet, goals, active ship, cargo, or route.
 
 ### GameState (`Services/GameState.cs`)
 `GameState` is the app-lifetime store for live operation facts. It is free of
@@ -129,24 +129,29 @@ The current slices are:
 - durable goals (shopping list and owned blueprints)
 - active ship and usable cargo capacity
 - carried cargo on the active ship
+- shared ordered route (current operation)
 
 `PublishX` methods are internal. Ordinary UI code cannot mutate a slice. A
 publish replaces one snapshot. Identical evidence is not a transition. Events
 fire outside the state lock: `Changed`, and one event per slice.
 
 `GameState` is not a settings store. It is not the UEX market catalog. It is
-not the hangar list. It is not the cargo lot table on disk.
+not the hangar list. It is not the cargo lot table on disk. It is not a second
+copy of Hauling cards or Starmap drafts.
 
 The hauling slice holds contract stops. Those stops do not prove that cargo is
-on the ship. My Hangar plus `AppSettings.ActiveShipId` are the store of record
+on the ship. The route slice is the ordered operation those stops seed. A log
+reset, shard change, and PU exit clear hauling and that seeded route together.
+They do not clear `cargo_lots`. My Hangar plus `AppSettings.ActiveShipId` are the store of record
 for the confirmed ship. `cargo_lots` in `nexus.db` is the store of record for
 carried cargo. `GameState` publishes the live snapshots. The cargo slice holds
 the active ship's lots plus used and free SCU.
 
 `App.GameState` is the one instance. `PlayerPlace` reads location from it.
-`NextPlanner` reads location and hauling stops from it. The Ships module
-publishes the active ship into it. Cargo Hauling publishes confirmed lots
-into the cargo slice.
+`NextPlanner` reads location, hauling stops, and the shared route from it.
+The Ships module publishes the active ship into it. Cargo Hauling publishes
+confirmed lots into the cargo slice. `HaulTracker` seeds the route slice from
+contract stops. Operations, Starmap, and overlay do not bind to the route yet.
 
 ### Services (`Services/`)
 The view model controls these services. Each service holds little or no state.
@@ -236,6 +241,14 @@ The view model controls these services. Each service holds little or no state.
   that is not a haul card. Destination is a free-text note on the lot. It is
   not linked to a haul stop or terminal yet; linking it stays on cargo lots
   (or splits of a lot), not on `GameHaulingState`.
+- **RoutePlan (RoutePlanMath / RouteProjection)** - the shared ordered route
+  for the current operation. Stops can mix pickup, delivery, buy, and sell.
+  Every stop is skippable. Items that would fail a contract if skipped carry
+  `SkipRisk` and a reason so later UI can warn; this layer does not draw that
+  glyph. Insert and reorder are snapshot operations for later editors. The
+  hauling seed copies incomplete contract stops into the route; it does not
+  invent a second obligation model. Hauling `StopBoard` stays page-local.
+  Trade pins are not merged yet.
 - **GuideCatalog** - the single source of truth for the Mission Guides feature.
   Each entry is one curated guide image: an id, a title, a category, an
   embedded PNG resource, and its native pixel size. `GuidesPage` and the
@@ -406,8 +419,10 @@ adds the reward, the contractor, and the cargo details to the matching haul.
 recent server and shard list. `ContractCapCatalog` is an embedded table. It maps
 each contract to its container size in SCU. The `Haul` model holds the haul state.
 `HaulTracker` also publishes the active hauls and incomplete stops into
-`GameState`. A log reset, a shard change, and a PU exit clear that slice.
-They do not clear `cargo_lots`.
+`GameState`, and seeds the shared route from those stops. A log reset, a shard
+change, and a PU exit clear hauling and the seeded route. They do not clear
+`cargo_lots`. The Hauling page stop board is still a page-local merge; it is
+not the RoutePlan.
 
 The Cargo Hauling page hosts Aboard above the contract cards. Aboard edits
 the cargo believed to be on the active hangar ship. Add a 0 SCU lot, then
@@ -422,14 +437,16 @@ off haul cards until a later issue. COMMITTED still counts
 accepted contract and route SCU against the Trade planner ship.
 
 ### NEXT (hauling rule set)
-`NextPlanner` reads location and hauling stops from `GameState`. It ranks a stop
-at the current location first. If the location is unknown, it ranks pickups
-before dropoffs. Each `NextAction` has a module, a kind, a score, an
-explanation, and a confidence.
+`NextPlanner` reads location from `GameState`. When the route slice has stops,
+it ranks remaining actions on unskipped visits. Otherwise it ranks hauling
+contract stops, as before. A stop at the current location ranks first. If the
+location is unknown, pickups and buys rank before dropoffs and sells. Each
+`NextAction` has a module, a kind, a score, an explanation, and a confidence.
 
-The same record shape can hold a later trade, mining, refinery, or blueprint
+The same record shape can hold a later mining, refinery, or blueprint
 action. `NextPlanner` does not call a provider. It does not use an AI model.
-Desktop and overlay surfaces do not bind to it yet.
+Desktop and overlay surfaces do not bind to it yet. Skip-risk reasons are
+data on the route, not NEXT ranks.
 
 ### Mission Guides
 `GuideCatalog` is the single list of curated guide images. Each entry names a

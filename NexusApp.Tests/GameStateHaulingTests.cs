@@ -129,6 +129,7 @@ public class GameStateHaulingTests
 
         Assert.Equal(GameHaulingState.Empty, state.Hauling);
         Assert.Empty(hauls.AllHauls);
+        Assert.Equal(GameRoutePlan.Empty, state.Route);
         Assert.Equal("New Babbage", state.Location.Label);
         Assert.Equal(1, state.Session.LogGeneration);
         Assert.Equal(0, locationChanged);
@@ -149,6 +150,7 @@ public class GameStateHaulingTests
 
         Assert.Equal(GameHaulingState.Empty, state.Hauling);
         Assert.Empty(hauls.AllHauls);
+        Assert.Equal(GameRoutePlan.Empty, state.Route);
         Assert.Equal("New Babbage", state.Location.Label);
     }
 

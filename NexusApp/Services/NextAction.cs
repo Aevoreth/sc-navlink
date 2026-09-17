@@ -75,10 +75,15 @@ public sealed record NextRecommendation(
 
 /// <summary>
 /// Inputs the first <c>NEXT</c> rule set consumes. Location plus hauling stops
-/// are required. Later trade, mining, refinery, or goal slices can be added
-/// to this record without changing <see cref="NextAction"/>.
+/// are the original path. When <see cref="Route"/> has stops, remaining unskipped
+/// route actions are used instead. Later mining, refinery, or goal slices can be
+/// added without changing <see cref="NextAction"/>.
 /// </summary>
-public sealed record NextPlannerInput(GameLocationState Location, GameHaulingState Hauling)
+public sealed record NextPlannerInput(
+    GameLocationState Location,
+    GameHaulingState Hauling,
+    GameRoutePlan Route)
 {
-    public static NextPlannerInput From(GameState state) => new(state.Location, state.Hauling);
+    public static NextPlannerInput From(GameState state) =>
+        new(state.Location, state.Hauling, state.Route);
 }
