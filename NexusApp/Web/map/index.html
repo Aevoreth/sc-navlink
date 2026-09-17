@@ -210,7 +210,7 @@ import {OrbitControls} from './OrbitControls.js';
 /* ==========================================================================
    Starmap scene page for the MAP tab, hosted in a WebView2 control.
      C# -> JS : init, layerToggle, select, focusObject, routeChanged,
-                plannerRoute, measureArm, systemView, playerMarker
+                plannerRoute, operationRoute, measureArm, systemView, playerMarker
      JS -> C# : ready, pinClick, pinDoubleClick, measureResult, log
    Every message is a single object distinguished by "type", posted as JSON
    (window.chrome.webview.postMessage). This page holds only what a message
@@ -340,6 +340,7 @@ const state = {
   system:'', layers:{trade:false, guides:false, mining:false, hangar:false, hauls:false, orders:false, asteroids:true},
   selection:null, focusName:null,
   draft:[], planner:[],
+  operation:{ids:[], current:null, next:null},
   measure:{armed:false, first:null, result:null},
   playerMarker:null,           // MapObject.Id the live Game.log location resolved to, or null
   lite:false,                  // locator mode: no pins, no routes, no measure (Operations system view)
@@ -348,7 +349,7 @@ let BY_ID = new Map();
 let childrenOf = new Map();
 let subRadius = new Map();
 let catalogRows = [];
-let sysGroup=null, routeLine=null, plannerLine=null, measureLine=null;
+let sysGroup=null, routeLine=null, plannerLine=null, operationLine=null, operationLeg=null, measureLine=null;
 const pins=new Map();          // id -> {sprite, ticks:[], obj}
 let projected=[];              // per-frame screen projections
 let hoverId=null;              // ephemeral pointer-hover id, never sent to the host
@@ -368,7 +369,7 @@ function buildSystem(){
     if(o.isSprite){ o.material.dispose(); }
     else { if(o.geometry) o.geometry.dispose(); if(o.material) o.material.dispose(); }
   }); }
-  routeLine=null; plannerLine=null; measureLine=null;
+  routeLine=null; plannerLine=null; operationLine=null; operationLeg=null; measureLine=null;
   pins.clear();
   sysGroup=new THREE.Group(); scene.add(sysGroup);
   const rows=catalogRows;
@@ -392,6 +393,7 @@ function buildSystem(){
   rows.filter(r=>r.type==='Moon').forEach(m=>{ const p=BY_ID.get(m.parent);
     if(p&&p.type==='Planet') mkRing(p.x/MM,-p.y/MM,m.z/MM, distM(p,m)/MM); });
   redrawPlanner();
+  redrawOperation();
   /* First build on the FULL map homes to the locator's measured tilt and starts the same idle
      drift (2026-08-17: both starmaps open on one view, unlinked - each page owns its camera).
      Once only: later inits and system switches keep whatever direction the user settled on, the
@@ -421,6 +423,38 @@ function redrawPlanner(){
     plannerLine=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts),
       new THREE.LineBasicMaterial({color:0xFFB23E, transparent:true, opacity:0.45}));
     plannerLine.renderOrder=1; sysGroup.add(plannerLine);
+  }
+}
+
+/* shared RoutePlan polyline: cyan, always on when the host sent ids, never the MAP draft
+   (dashed amber) or Trade planner pairs (dim amber segments). Current -> next is brighter.
+   Lite/locator mode draws nothing. An id not in the active system drops out on its own. */
+function redrawOperation(){
+  if(!sysGroup) return;
+  if(operationLine){ sysGroup.remove(operationLine); operationLine.geometry.dispose();
+    operationLine.material.dispose(); operationLine=null; }
+  if(operationLeg){ sysGroup.remove(operationLeg); operationLeg.geometry.dispose();
+    operationLeg.material.dispose(); operationLeg=null; }
+  if(state.lite) return;
+  const ids = (state.operation && state.operation.ids) || [];
+  const pts=[];
+  for(let i=0;i<ids.length;i++){
+    const o=BY_ID.get(ids[i]);
+    if(!o) continue;
+    pts.push(new THREE.Vector3(o.x/MM,o.z/MM,-o.y/MM));
+  }
+  if(pts.length>1){
+    operationLine=new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts),
+      new THREE.LineBasicMaterial({color:0x7FE9E0, transparent:true, opacity:0.28}));
+    operationLine.renderOrder=1; sysGroup.add(operationLine);
+  }
+  const a=BY_ID.get(state.operation && state.operation.current);
+  const b=BY_ID.get(state.operation && state.operation.next);
+  if(a && b){
+    operationLeg=new THREE.Line(new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(a.x/MM,a.z/MM,-a.y/MM), new THREE.Vector3(b.x/MM,b.z/MM,-b.y/MM)]),
+      new THREE.LineBasicMaterial({color:0x7FE9E0, transparent:true, opacity:0.9}));
+    operationLeg.renderOrder=2; sysGroup.add(operationLeg);
   }
 }
 
@@ -825,6 +859,12 @@ function applyInit(msg){
   state.focusName = null;
   state.draft = Array.isArray(msg.draft)? msg.draft.slice() : [];
   state.planner = Array.isArray(msg.planner)? msg.planner.slice() : [];
+  const op = msg.operation || {};
+  state.operation = {
+    ids: Array.isArray(op.ids)? op.ids.slice() : [],
+    current: (op.current==null)? null : op.current,
+    next: (op.next==null)? null : op.next
+  };
   state.playerMarker = (msg.player==null)? null : msg.player;
   /* Two liveness states on every location surface (2026-08-17): absent flag means live, so an
      older host build keeps today's dressing. Stale = grey ring, grey YOU tag, LAST KNOWN card. */
@@ -851,6 +891,7 @@ function applyInit(msg){
 
   buildSystem();
   redrawRoute();
+  redrawOperation();
   redrawMeasure();
   renderBreadcrumb();
   if(state.lite) applyLite(msg);   /* after BY_ID exists, so the card can name the player's object */
@@ -888,6 +929,14 @@ function onPlannerRoute(ids){
   state.planner = Array.isArray(ids)? ids : [];
   redrawPlanner();
 }
+function onOperationRoute(msg){
+  state.operation = {
+    ids: Array.isArray(msg.ids)? msg.ids.slice() : [],
+    current: (msg.current==null)? null : msg.current,
+    next: (msg.next==null)? null : msg.next
+  };
+  redrawOperation();
+}
 function onMeasureArm(on){
   const armed=!!on;
   state.measure={armed, first:null, result:armed? null:state.measure.result};
@@ -910,6 +959,7 @@ if (window.chrome && window.chrome.webview) {
         case 'focusObject': focusObject(d.id); break;
         case 'routeChanged': onRouteChanged(d.ids); break;
         case 'plannerRoute': onPlannerRoute(d.ids); break;
+        case 'operationRoute': onOperationRoute(d); break;
         case 'measureArm': onMeasureArm(d.on); break;
         case 'systemView': systemView(); break;
         case 'playerMarker': onPlayerMarker(d.id, d.live); break;

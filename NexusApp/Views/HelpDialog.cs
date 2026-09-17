@@ -232,8 +232,9 @@ public class HelpDialog : Window
             [new("Auto-scan contracts", "switch"), new("⊕", "set contract region")],
             [
                 "Open the Cargo Hauling module in the app dock - contracts you accept in game appear automatically, no manual entry.",
-                "Active hauls show as cards with the contractor, route, and each collect / deliver leg.",
-                "The Collect / deliver consolidation table groups every leg by location, so you can fly one efficient route across all your hauls.",
+                "Active hauls show as cards with the contractor, route, and each collect / deliver leg. Each remaining leg has a Task Complete button.",
+                "Press Task Complete on the Operations NEXT card after you finish that step. The same button is on Cargo Hauling STOPS, overlay HUB NEXT, and overlay CARGO.",
+                "The Collect / deliver consolidation table groups every remaining leg by location, so you can fly one efficient route across all your hauls.",
                 "Finished hauls drop to the bottom with an outcome chip - Complete in green, other endings in amber.",
                 "Want reward, contractor, and cargo details? Scan the in-game Contracts screen: on the overlay HAULING tab, turn on Auto-scan contracts and click ⊕ Set contract detection region over the contract panel.",
                 "Contract scanning uses its own yellow detection box, separate from the magenta RS box - the two never interfere.",
@@ -247,10 +248,11 @@ public class HelpDialog : Window
             [new("LIVE / OFFLINE", "game link")],
             [
                 "Operations opens by default when SC-navLink starts - it's the first module in the app dock.",
-                "KPI cards along the top give an at-a-glance readout: last RS scan, refinery queue, cargo in transit, session blueprints, and network coverage.",
-                "The REFINERY QUEUE and ACTIVE HAULS panels link straight into their modules with Open tracker and Open hauling.",
-                "NETWORK RISK flags blueprints only one person in your Blueprint Network owns.",
+                "NEXT shows the deterministic next action from shared route and hauling state. Ship/hold and remaining route sit on the right rail; click through to Ships or the Starmap.",
+                "Press Task Complete on the NEXT card after you finish that collect or deliver. NEXT follows remaining work, not Aboard Contracted flags, and does not treat Game.log pickup-complete as cargo collected.",
+                "The REFINERY QUEUE, AUTO LOAD, and EXEC HANGAR cards link into their modules. NETWORK COVERAGE flags blueprints only one person in your Blueprint Network owns.",
                 "SERVER / SHARD shows your current shard and recent ones - the same data as the overlay HUB.",
+                "The overlay HUB shows the same NEXT strip while you play.",
                 "The LIVE badge on the Operations dock tile means Star Citizen is running; it flips to OFFLINE when the game closes. The GAME SESSION pill in the header mirrors the same signal.",
             ]),
     ];

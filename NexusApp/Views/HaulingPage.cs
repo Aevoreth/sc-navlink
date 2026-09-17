@@ -520,12 +520,20 @@ public sealed class HaulingPage : UserControl
         if (h.ContractObjectives.Count > 0)
         {
             for (int i = 0; i < h.ContractObjectives.Count; i++)
-                inner.Children.Add(OcrObjectiveRow(h.MissionId, i, h.ContractObjectives[i], allowHighlight));
+            {
+                var o = h.ContractObjectives[i];
+                if (!string.IsNullOrWhiteSpace(o.Pickup))
+                    inner.Children.Add(OcrStopRow(h, i, HaulRole.Pickup, o, allowHighlight));
+                if (!string.IsNullOrWhiteSpace(o.Dropoff))
+                    inner.Children.Add(OcrStopRow(h, i, HaulRole.Dropoff, o, allowHighlight));
+                if (string.IsNullOrWhiteSpace(o.Pickup) && string.IsNullOrWhiteSpace(o.Dropoff))
+                    inner.Children.Add(OcrObjectiveRow(h.MissionId, i, o, allowHighlight));
+            }
         }
         else
         {
             foreach (var leg in h.Legs)
-                inner.Children.Add(LegRow(h.MissionId, leg, allowHighlight));
+                inner.Children.Add(LegRow(h, leg, allowHighlight));
         }
 
         var card = Hud.Panel(inner, brackets: true, padding: new Thickness(14, 12, 14, 12));
@@ -533,7 +541,7 @@ public sealed class HaulingPage : UserControl
         return card;
     }
 
-    private UIElement LegRow(string missionId, HaulLeg leg, bool allowHighlight)
+    private UIElement LegRow(Haul h, HaulLeg leg, bool allowHighlight)
     {
         var role = leg.Role == HaulRole.Pickup ? "Collect" : "Deliver";
 
@@ -551,6 +559,7 @@ public sealed class HaulingPage : UserControl
         var grid = new Grid { Margin = new Thickness(2, 6, 0, 0) };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var dot = StatusDot(leg.Completed);
         Grid.SetColumn(dot, 0); grid.Children.Add(dot);
         var tb = new TextBlock
@@ -563,9 +572,27 @@ public sealed class HaulingPage : UserControl
 
         // Row identity = haul id + the leg's own objective id (already leg-indexed); highlight only
         // the first time this key is seen, and only when the caller says it is allowed to.
-        var key = $"{missionId}|{leg.ObjectiveId}";
+        var key = $"{h.MissionId}|{leg.ObjectiveId}";
         if (_seenRowKeys.Add(key) && allowHighlight) HighlightRow(grid);
-        return grid;
+
+        var location = leg.Role == HaulRole.Dropoff ? leg.Destination : h.PickupName;
+        var commodity = leg.Commodity;
+        if (string.IsNullOrWhiteSpace(commodity) && leg.Role == HaulRole.Pickup)
+        {
+            var sib = h.Legs.Find(l => l.Role == HaulRole.Dropoff && l.CargoKey == leg.CargoKey);
+            commodity = sib?.Commodity ?? "";
+        }
+        if (!leg.Completed)
+        {
+            var btn = Hud.TaskCompleteButton(
+                () => App.Hauls.SetStopCompleted(h.MissionId, leg.Role, location, commodity, true),
+                compact: true);
+            btn.Margin = new Thickness(10, 0, 0, 0);
+            Grid.SetColumn(btn, 2); grid.Children.Add(btn);
+            return grid;
+        }
+        return MarkableStopRow(grid, true, role, () =>
+            App.Hauls.SetStopCompleted(h.MissionId, leg.Role, location, commodity, false));
     }
 
     // Builds the display string for one OCR-sourced ContractObjective, omitting empty segments.
@@ -609,6 +636,65 @@ public sealed class HaulingPage : UserControl
         var key = $"{missionId}|obj{index}";
         if (_seenRowKeys.Add(key) && allowHighlight) HighlightRow(grid);
         return grid;
+    }
+
+    private UIElement OcrStopRow(Haul h, int index, HaulRole role, ContractObjective o, bool allowHighlight)
+    {
+        var done = role == HaulRole.Pickup
+            ? HaulTracker.ObjectivePickupComplete(h, o)
+            : HaulTracker.ObjectiveDropoffComplete(h, o);
+        var label = role == HaulRole.Pickup ? "Collect" : "Deliver";
+        var place = role == HaulRole.Pickup ? o.Pickup : o.Dropoff;
+        var segs = new List<string>();
+        if (o.Scu > 0) segs.Add($"{o.Scu} SCU");
+        if (!string.IsNullOrWhiteSpace(o.Commodity)) segs.Add(o.Commodity);
+        segs.Add(role == HaulRole.Pickup ? $"from {place}" : $"-> {place}");
+
+        var grid = new Grid { Margin = new Thickness(2, 6, 0, 0) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var dot = StatusDot(done);
+        Grid.SetColumn(dot, 0); grid.Children.Add(dot);
+        var tb = new TextBlock
+        {
+            Text = $"{label}: {string.Join(" ", segs)}", FontFamily = Mono, FontSize = 12,
+            Foreground = done ? Br("FgDimBrush") : Br("FgBrush"),
+            TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center,
+        };
+        Grid.SetColumn(tb, 1); grid.Children.Add(tb);
+
+        var key = $"{h.MissionId}|obj{index}|{role}";
+        if (_seenRowKeys.Add(key) && allowHighlight) HighlightRow(grid);
+        if (!done)
+        {
+            var btn = Hud.TaskCompleteButton(
+                () => App.Hauls.SetStopCompleted(h.MissionId, role, place, o.Commodity, true),
+                compact: true);
+            btn.Margin = new Thickness(10, 0, 0, 0);
+            Grid.SetColumn(btn, 2); grid.Children.Add(btn);
+            return grid;
+        }
+        return MarkableStopRow(grid, true, label, () =>
+            App.Hauls.SetStopCompleted(h.MissionId, role, place, o.Commodity, false));
+    }
+
+    private UIElement MarkableStopRow(UIElement inner, bool done, string role, Action toggle)
+    {
+        var hit = new Border
+        {
+            Background = Brushes.Transparent, Cursor = Cursors.Hand, Child = inner,
+            ToolTip = done
+                ? $"Click to reopen this {role.ToLowerInvariant()} so NEXT includes it again."
+                : $"Click to mark this {role.ToLowerInvariant()} done. NEXT will move to the next stop.",
+        };
+        hit.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true;
+            InteractionLog.Click(done ? $"reopen haul {role}" : $"mark haul {role} done", hit);
+            toggle();
+        };
+        return hit;
     }
 
     // One-shot row-insert highlight: a per-row SolidColorBrush clone (never a shared/frozen resource)
@@ -683,12 +769,14 @@ public sealed class HaulingPage : UserControl
         table.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                         // Action
         table.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });    // Commodity
         table.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                         // SCU
+        table.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                         // Task Complete
 
         table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         AddCell(table, 0, 0, HeaderCell("LOCATION", false));
         AddCell(table, 0, 1, HeaderCell("ACTION", false));
         AddCell(table, 0, 2, HeaderCell("COMMODITY", false));
         AddCell(table, 0, 3, HeaderCell("SCU", true));
+        AddCell(table, 0, 4, HeaderCell("", false));
 
         // The distance is appended to the LOCATION cell only on the first row of each stop, so a
         // stop with four commodities does not repeat it four times. Null (unplaceable stop, or no
@@ -701,7 +789,7 @@ public sealed class HaulingPage : UserControl
             foreach (var e in s.Entries)
             {
                 rowIdx = AddStopRow(table, rowIdx, first && dist != null ? $"{s.Location}  ({dist})" : s.Location,
-                                    e.Action, e.Commodity, e.Scu);
+                                    s.Location, e.Action, e.Commodity, e.Scu, e.MissionId);
                 first = false;
             }
         }
@@ -725,13 +813,13 @@ public sealed class HaulingPage : UserControl
         _body.Children.Add(panel);
     }
 
-    private int AddStopRow(Grid table, int row, string location, StopAction action, string commodity, int scu)
+    private int AddStopRow(Grid table, int row, string displayLocation, string location, StopAction action, string commodity, int scu, string? missionId)
     {
         table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
         var loc = new TextBlock
         {
-            Text = string.IsNullOrWhiteSpace(location) ? "Unknown" : location, FontFamily = Head, FontSize = 12.5,
+            Text = string.IsNullOrWhiteSpace(displayLocation) ? "Unknown" : displayLocation, FontFamily = Head, FontSize = 12.5,
             Foreground = Br("FgBrush"), Margin = new Thickness(0, 5, 8, 5), VerticalAlignment = VerticalAlignment.Center,
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
@@ -764,6 +852,16 @@ public sealed class HaulingPage : UserControl
             Margin = new Thickness(0, 5, 0, 5), VerticalAlignment = VerticalAlignment.Center,
         };
         AddCell(table, row, 3, scuTb);
+
+        if ((action == StopAction.Collect || action == StopAction.Deliver) && !string.IsNullOrWhiteSpace(missionId))
+        {
+            var role = action == StopAction.Collect ? HaulRole.Pickup : HaulRole.Dropoff;
+            var btn = Hud.TaskCompleteButton(
+                () => App.Hauls.SetStopCompleted(missionId, role, location, commodity, completed: true),
+                compact: true);
+            btn.Margin = new Thickness(12, 2, 0, 2);
+            AddCell(table, row, 4, btn);
+        }
 
         return row + 1;
     }

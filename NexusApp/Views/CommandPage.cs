@@ -119,19 +119,18 @@ public sealed partial class CommandPage : UserControl
         // App review 2026-08-01: the page subtitle promises "Everything live, in one glance" and the
         // class comment above asserts the dashboard "rebuilds its content statically on every live
         // data tick", but the only triggers were the three subscriptions above plus tab activation.
-        // Nothing listened for hauls or work orders, so accepting a contract in game did not move
-        // CARGO IN TRANSIT or ACTIVE HAULS, and the refinery rows sat frozen. HaulTracker was
-        // already raising the Changed event nobody had subscribed to. Unfinished wiring, not a
-        // decision - the entrance cascade is separately gated behind _entrancePlayed, so a Refresh
-        // on a data tick has always been the intended mechanism and never replays the animation.
+        // 0.2 presentation binds NEXT / ship / route to GameState slices instead of the old haul
+        // KPI cards. RouteChanged covers a contract accept that seeds the shared route.
         //
-        // Guarded on IsVisible, unlike the three above, because hauls and work orders tick far more
+        // Guarded on IsVisible, unlike the three above, because work orders tick far more
         // often than a shard or channel change and rebuilding a hidden page's whole visual tree for
         // each one is pure waste. Nothing is missed: MainWindow's SetActivePage calls Refresh on
         // every activation, so a page that skipped updates while hidden catches up on open. Same
         // idiom as TradePage and MapPage's own permanent subscriptions.
-        App.Hauls.Changed += () => Dispatcher.BeginInvoke(() => { if (IsVisible) Refresh(); });
         _vm.WorkOrders.CollectionChanged += (_, _) => Dispatcher.BeginInvoke(() => { if (IsVisible) Refresh(); });
+        App.GameState.RouteChanged += () => Dispatcher.BeginInvoke(() => { if (IsVisible) Refresh(); });
+        App.GameState.ActiveShipChanged += () => Dispatcher.BeginInvoke(() => { if (IsVisible) Refresh(); });
+        App.GameState.CargoChanged += () => Dispatcher.BeginInvoke(() => { if (IsVisible) Refresh(); });
         // The header subtitle now reports where the player was last seen, so a boundary crossing has
         // to repaint it. Same guard and same idiom MapPage uses for its own player marker.
         App.Locations.Changed += () => Dispatcher.BeginInvoke(() => { if (IsVisible) Refresh(); });

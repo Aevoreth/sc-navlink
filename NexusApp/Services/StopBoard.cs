@@ -6,7 +6,7 @@ namespace NexusApp.Services;
 // naturally runs in and the order entries sort within a stop.
 public enum StopAction { Collect, Deliver, Sell }
 
-public sealed record StopEntry(StopAction Action, string Commodity, int Scu);
+public sealed record StopEntry(StopAction Action, string Commodity, int Scu, string? MissionId = null);
 
 public sealed record BoardStop(string Location, IReadOnlyList<StopEntry> Entries)
 {
@@ -42,7 +42,7 @@ public static class StopBoard
         var order = new List<string>();
         var byLocation = new Dictionary<string, List<StopEntry>>(StringComparer.OrdinalIgnoreCase);
 
-        void Add(string? location, StopAction action, string commodity, int scu)
+        void Add(string? location, StopAction action, string commodity, int scu, string? missionId = null)
         {
             var key = (location ?? "").Trim();
             if (!byLocation.TryGetValue(key, out var list))
@@ -50,13 +50,13 @@ public static class StopBoard
                 byLocation[key] = list = new List<StopEntry>();
                 order.Add(key);   // the first spelling seen wins; the comparer keeps later ones out
             }
-            list.Add(new StopEntry(action, commodity, scu));
+            list.Add(new StopEntry(action, commodity, scu, missionId));
         }
 
         foreach (var s in con.Pickups)
-            foreach (var item in s.Items) Add(s.Location, StopAction.Collect, item.Commodity, item.Scu);
+            foreach (var item in s.Items) Add(s.Location, StopAction.Collect, item.Commodity, item.Scu, item.MissionId);
         foreach (var s in con.Dropoffs)
-            foreach (var item in s.Items) Add(s.Location, StopAction.Deliver, item.Commodity, item.Scu);
+            foreach (var item in s.Items) Add(s.Location, StopAction.Deliver, item.Commodity, item.Scu, item.MissionId);
 
         foreach (var r in routes)
         {

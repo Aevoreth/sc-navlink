@@ -6,6 +6,7 @@ using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using NexusApp.Models;
+using NexusApp.Services;
 
 namespace NexusApp.Views;
 
@@ -202,6 +203,30 @@ public static partial class Hud
             BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(3),
             Padding = new Thickness(7, 2, 8, 2), HorizontalAlignment = HorizontalAlignment.Left, Child = row,
         };
+    }
+
+    /// <summary>Marks the current haul collect/deliver done so NEXT advances.</summary>
+    public static Button TaskCompleteButton(Action onClick, bool compact = false)
+    {
+        var btn = new Button
+        {
+            Content = "Task Complete",
+            Style = (Style)Application.Current.FindResource("NexusButton"),
+            Padding = compact ? new Thickness(8, 2, 8, 2) : new Thickness(12, 5, 12, 5),
+            FontSize = compact ? 9 : 11,
+            FontWeight = FontWeights.SemiBold,
+            Cursor = System.Windows.Input.Cursors.Hand,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = "Mark this step done. NEXT will move to the next stop.",
+        };
+        btn.Click += (_, e) =>
+        {
+            e.Handled = true;
+            InteractionLog.Click("task complete", btn);
+            onClick();
+        };
+        return btn;
     }
 
     // ── State progress bar: faint track + gradient fill color-coded by state + glow ──

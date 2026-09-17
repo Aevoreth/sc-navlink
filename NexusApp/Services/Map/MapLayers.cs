@@ -185,4 +185,34 @@ public static class MapLayers
 
         return byObject.ToDictionary(kv => kv.Key, kv => (IReadOnlyList<string>)kv.Value);
     }
+
+    /// <summary>
+    /// Shared RoutePlan stops as catalog ids for the starmap polyline (0.2 presentation).
+    /// Unresolved labels are omitted, never guessed. Skipped visits stay off the line.
+    /// Consecutive duplicate ids (same place twice) collapse to one vertex.
+    /// </summary>
+    public static MapOperationRoute BuildOperationRoute(GameRoutePlan plan, MapCatalog catalog)
+    {
+        if (plan is null || !plan.HasStops) return MapOperationRoute.Empty;
+
+        var ids = new List<int>();
+        foreach (var stop in plan.Stops)
+        {
+            if (stop.Skipped) continue;
+            var obj = catalog.ResolvePlayerLocation(stop.Location.Label, rawToken: null);
+            if (obj is null) continue;
+            if (ids.Count > 0 && ids[^1] == obj.Id) continue;
+            ids.Add(obj.Id);
+        }
+
+        int? current = ResolveStop(plan.CurrentStop, catalog);
+        int? next = ResolveStop(plan.NextStop, catalog);
+        return new MapOperationRoute(ids, current, next);
+    }
+
+    private static int? ResolveStop(GameRouteStop? stop, MapCatalog catalog)
+    {
+        if (stop is null) return null;
+        return catalog.ResolvePlayerLocation(stop.Location.Label, rawToken: null)?.Id;
+    }
 }

@@ -54,7 +54,7 @@ public sealed class TourController
         new(TutorialTarget.AppDock, "The module dock",
             "Eleven modules, one click each. When you want to do something instead of glance at it, it lives on this dock - Settings included, down at the bottom."),
         new(TutorialTarget.OperationsKpis, "Operations preflight",
-            "SC-navLink lands here on launch. Read the row - last scan, refinery queue, cargo in transit, session blueprints, network coverage - and every panel below links straight into its module."),
+            "SC-navLink lands here on launch. NEXT is the deterministic next action. The job cards, ship/hold, remaining route, and wallet below all link into their modules."),
         // Starmap and Trade had no tour step at all (app review): the tour was written before both
         // modules existed and never grew to cover them, so a first-run user met nine of the eleven
         // dock tiles. Placed to follow the reading order of the loop - navigate, then the mining

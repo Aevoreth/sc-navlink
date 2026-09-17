@@ -65,6 +65,69 @@ public sealed class HaulTracker : IDisposable
         }
     }
 
+    /// <summary>
+    /// Session-only: mark a collect or deliver stop done (or reopen it). Remaining-work
+    /// consolidation and the shared route reseed so NEXT can advance. Does not write Game.log
+    /// or cargo lots. Unknown, finished, or unmatched stops return false.
+    /// </summary>
+    public bool SetStopCompleted(string missionId, HaulRole role, string? location, string? commodity, bool completed)
+    {
+        if (!ApplyStopCompleted(missionId, role, location, commodity, completed)) return false;
+        RaiseChanged();
+        return true;
+    }
+
+    /// <summary>Mark several remaining stops in one publish so NEXT reseeds once.</summary>
+    public bool SetStopsCompleted(
+        IEnumerable<(string MissionId, HaulRole Role, string? Location, string? Commodity)> stops,
+        bool completed = true)
+    {
+        var any = false;
+        foreach (var s in stops)
+            any |= ApplyStopCompleted(s.MissionId, s.Role, s.Location, s.Commodity, completed);
+        if (any) RaiseChanged();
+        return any;
+    }
+
+    /// <summary>
+    /// Mark the current NEXT haul step done. Trade/buy/sell recommendations are ignored.
+    /// </summary>
+    public bool TryCompleteNext(NextAction? action)
+    {
+        if (action is null || string.IsNullOrWhiteSpace(action.MissionId)) return false;
+        var role = action.Kind switch
+        {
+            NextActionKind.HaulPickup => HaulRole.Pickup,
+            NextActionKind.HaulDropoff => HaulRole.Dropoff,
+            _ => (HaulRole?)null,
+        };
+        if (role is null) return false;
+        return SetStopCompleted(action.MissionId, role.Value, action.Location, action.Objective, completed: true);
+    }
+
+    /// <summary>OCR collect is done only when the player marked it. Game.log pickup-complete is not cargo collected.</summary>
+    public static bool ObjectivePickupComplete(Haul h, ContractObjective o)
+    {
+        _ = h;
+        return o.PickupCompleted;
+    }
+
+    /// <summary>OCR deliver is done when the player marked it or matching dropoff legs are complete.</summary>
+    public static bool ObjectiveDropoffComplete(Haul h, ContractObjective o)
+    {
+        if (o.DropoffCompleted) return true;
+        var drops = h.Legs.FindAll(l => l.Role == HaulRole.Dropoff);
+        if (drops.Count == 0) return false;
+        var matched = 0;
+        foreach (var leg in drops)
+        {
+            if (!DropoffLegMatchesObjective(leg, o)) continue;
+            matched++;
+            if (!leg.Completed) return false;
+        }
+        return matched > 0;
+    }
+
     private void ClearInternal()
     {
         _byId.Clear();
@@ -92,10 +155,29 @@ public sealed class HaulTracker : IDisposable
             // system-level ("Stanton System") dropoffs in the table.
             if (h.ContractObjectives.Count > 0)
             {
+                var addedOcrPickup = false;
                 foreach (var o in h.ContractObjectives)
                 {
-                    if (!string.IsNullOrWhiteSpace(o.Pickup))  AddItem(pickups,  o.Pickup,  o.Commodity, o.Scu, h.MissionId);
-                    if (!string.IsNullOrWhiteSpace(o.Dropoff)) AddItem(dropoffs, o.Dropoff, o.Commodity, o.Scu, h.MissionId);
+                    if (!string.IsNullOrWhiteSpace(o.Pickup) && !o.PickupCompleted)
+                    {
+                        AddItem(pickups, o.Pickup, o.Commodity, o.Scu, h.MissionId);
+                        addedOcrPickup = true;
+                    }
+                    if (!string.IsNullOrWhiteSpace(o.Dropoff) && !ObjectiveDropoffComplete(h, o))
+                        AddItem(dropoffs, o.Dropoff, o.Commodity, o.Scu, h.MissionId);
+                }
+
+                // OCR often reads Deliver and misses Collect. If no collect remains named, keep
+                // incomplete log pickups so NEXT does not jump straight to Deliver.
+                if (!addedOcrPickup && !h.ContractObjectives.Exists(o => o.PickupCompleted))
+                {
+                    foreach (var leg in h.Legs)
+                    {
+                        if (leg.Role != HaulRole.Pickup || leg.Completed) continue;
+                        var sib = h.Legs.Find(l => l.Role == HaulRole.Dropoff && l.CargoKey == leg.CargoKey);
+                        var name = string.IsNullOrWhiteSpace(h.PickupName) ? "Pickup (TBD)" : h.PickupName;
+                        AddItem(pickups, name, sib?.Commodity ?? "", sib?.TargetScu ?? 0, h.MissionId);
+                    }
                 }
                 continue;
             }
@@ -180,6 +262,14 @@ public sealed class HaulTracker : IDisposable
             var leg = ch.LegByObjective(completed.ObjectiveId);
             if (leg is not null)
             {
+                // Pickup ObjectiveCompleted often fires on accept when you are already at the
+                // source. That is not cargo collected, so remaining work stays on Collect until
+                // Task Complete (or a real dropoff complete).
+                if (leg.Role == HaulRole.Pickup)
+                {
+                    Logger.Info($"[HAUL] pickup objective completed in log (ignored for remaining work): {ch.Company}");
+                    return;
+                }
                 leg.Completed = true;
                 Logger.Info($"[HAUL] leg complete: {ch.Company} {leg.Role} {leg.Commodity}");
                 RaiseChanged();
@@ -334,9 +424,109 @@ public sealed class HaulTracker : IDisposable
     {
         if (d.Reward > 0) h.Reward = d.Reward;
         if (!string.IsNullOrWhiteSpace(d.ContractedBy)) h.ContractedBy = d.ContractedBy;
-        if (d.Objectives.Count > 0) h.ContractObjectives = d.Objectives;
+        if (d.Objectives.Count > 0)
+        {
+            var old = h.ContractObjectives;
+            foreach (var n in d.Objectives)
+            {
+                var prev = old.Find(o => SamePlace(o.Pickup, n.Pickup)
+                    && SamePlace(o.Dropoff, n.Dropoff)
+                    && CommodityMatches(o.Commodity, n.Commodity));
+                if (prev is null) continue;
+                n.PickupCompleted = prev.PickupCompleted;
+                n.DropoffCompleted = prev.DropoffCompleted;
+            }
+            h.ContractObjectives = d.Objectives;
+        }
         if (d.ContainerCap.HasValue && !h.ContainerCap.HasValue) h.ContainerCap = d.ContainerCap;  // OCR fills only when the datamined map has no entry
     }
+
+    private bool ApplyStopCompleted(string missionId, HaulRole role, string? location, string? commodity, bool completed)
+    {
+        if (!_byId.TryGetValue(missionId, out var h) || !h.IsActive) return false;
+        var changed = false;
+
+        foreach (var o in h.ContractObjectives)
+        {
+            if (role == HaulRole.Pickup)
+            {
+                if (string.IsNullOrWhiteSpace(o.Pickup)) continue;
+                if (!string.IsNullOrWhiteSpace(location) && !LocationEq(o.Pickup, location)) continue;
+                if (!CommodityMatches(commodity, o.Commodity)) continue;
+                if (o.PickupCompleted == completed) continue;
+                o.PickupCompleted = completed;
+                changed = true;
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(o.Dropoff)) continue;
+                if (!string.IsNullOrWhiteSpace(location) && !LocationEq(o.Dropoff, location)) continue;
+                if (!CommodityMatches(commodity, o.Commodity)) continue;
+                if (o.DropoffCompleted == completed) continue;
+                o.DropoffCompleted = completed;
+                changed = true;
+            }
+        }
+
+        foreach (var leg in h.Legs)
+        {
+            if (leg.Role != role) continue;
+            if (!LegMatchesStop(h, leg, location, commodity)) continue;
+            if (leg.Completed == completed) continue;
+            leg.Completed = completed;
+            changed = true;
+        }
+
+        if (!changed) return false;
+        var verb = completed ? "marked" : "reopened";
+        var what = string.IsNullOrWhiteSpace(commodity) ? "" : $" {commodity.Trim()}";
+        var where = string.IsNullOrWhiteSpace(location) ? "" : $" @ {location.Trim()}";
+        Logger.Info($"[HAUL] user {verb} {role}{what}{where}: {h.Company}");
+        return true;
+    }
+
+    private static bool LegMatchesStop(Haul h, HaulLeg leg, string? location, string? commodity)
+    {
+        if (leg.Role == HaulRole.Dropoff)
+        {
+            if (!CommodityMatches(commodity, leg.Commodity)) return false;
+            if (string.IsNullOrWhiteSpace(location)) return true;
+            return LocationEq(leg.Destination, location);
+        }
+
+        var sib = h.Legs.Find(l => l.Role == HaulRole.Dropoff && l.CargoKey == leg.CargoKey);
+        if (!CommodityMatches(commodity, sib?.Commodity ?? leg.Commodity)) return false;
+        if (string.IsNullOrWhiteSpace(location) || IsTbdPickup(location)) return true;
+        if (!string.IsNullOrWhiteSpace(h.PickupName)) return LocationEq(h.PickupName, location);
+        // 2-to-1 OCR pickups share no log destination; leave those legs to the OCR flags.
+        return h.Legs.FindAll(l => l.Role == HaulRole.Pickup).Count == 1;
+    }
+
+    private static bool DropoffLegMatchesObjective(HaulLeg leg, ContractObjective o)
+    {
+        if (!CommodityMatches(o.Commodity, leg.Commodity)) return false;
+        if (string.IsNullOrWhiteSpace(o.Dropoff) || string.IsNullOrWhiteSpace(leg.Destination)) return true;
+        return LocationEq(leg.Destination, o.Dropoff);
+    }
+
+    private static bool LocationEq(string? a, string? b)
+    {
+        if (string.IsNullOrWhiteSpace(a) || string.IsNullOrWhiteSpace(b)) return false;
+        return string.Equals(a.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool SamePlace(string? a, string? b)
+        => string.Equals((a ?? "").Trim(), (b ?? "").Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private static bool CommodityMatches(string? filter, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(filter)) return true;
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        return string.Equals(filter.Trim(), value.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsTbdPickup(string? location)
+        => string.Equals((location ?? "").Trim(), "Pickup (TBD)", StringComparison.OrdinalIgnoreCase);
 
     // When a haul first appears (its company becomes known), apply any contract scanned before it existed.
     private void TryApplyPending(Haul h)

@@ -151,7 +151,9 @@ the active ship's lots plus used and free SCU.
 `NextPlanner` reads location, hauling stops, and the shared route from it.
 The Ships module publishes the active ship into it. Cargo Hauling publishes
 confirmed lots into the cargo slice. `HaulTracker` seeds the route slice from
-contract stops. Operations, Starmap, and overlay do not bind to the route yet.
+contract stops. Operations, Starmap, and overlay read that route through
+`RouteNextProjection` and `NextPlanner.Plan(GameState)`. The Operations locator
+map stays player-only. Trade pins are not merged into the route yet.
 
 ### Services (`Services/`)
 The view model controls these services. Each service holds little or no state.
@@ -191,7 +193,8 @@ The view model controls these services. Each service holds little or no state.
   returns an ordered list of next actions with an explanation, a score, and a
   confidence. It does not call a provider. It does not use an AI model. Later
   trade, mining, refinery, and blueprint actions can use the same `NextAction`
-  contract. Operations and the overlay do not show this list yet.
+  contract. Operations and the overlay HUB show the primary action through
+  `RouteNextProjection`.
 - **Network (NetworkFileService / NetworkStore / NetworkScope)** - the
   file-exchange subsystem for the offline Blueprint Network (see below).
 - **Update (UpdateService / UpdateVerifier / UpdateManifest / UpdateNotice)** -
@@ -241,14 +244,18 @@ The view model controls these services. Each service holds little or no state.
   that is not a haul card. Destination is a free-text note on the lot. It is
   not linked to a haul stop or terminal yet; linking it stays on cargo lots
   (or splits of a lot), not on `GameHaulingState`.
-- **RoutePlan (RoutePlanMath / RouteProjection)** - the shared ordered route
-  for the current operation. Stops can mix pickup, delivery, buy, and sell.
-  Every stop is skippable. Items that would fail a contract if skipped carry
-  `SkipRisk` and a reason so later UI can warn; this layer does not draw that
-  glyph. Insert and reorder are snapshot operations for later editors. The
-  hauling seed copies incomplete contract stops into the route; it does not
-  invent a second obligation model. Hauling `StopBoard` stays page-local.
-  Trade pins are not merged yet.
+- **RoutePlan (RoutePlanMath / RouteProjection / RouteNextProjection)** - the
+  shared ordered route for the current operation. Stops can mix pickup,
+  delivery, buy, and sell. Every stop is skippable. Items that would fail a
+  contract if skipped carry `SkipRisk` and a reason so later UI can warn; this
+  layer does not draw that glyph. Insert and reorder are snapshot operations
+  for later editors. The hauling seed copies incomplete contract stops into
+  the route; it does not invent a second obligation model. Hauling `StopBoard`
+  stays page-local. Trade pins are not merged yet. `RouteNextProjection` folds
+  the snapshot plus `NextPlanner` for Operations, Starmap, and the overlay
+  HUB. Starmap draws that ordered route as a cyan `operationRoute` polyline,
+  distinct from the MAP draft and Trade planner pairs. The Operations locator
+  stays player-only.
 - **GuideCatalog** - the single source of truth for the Mission Guides feature.
   Each entry is one curated guide image: an id, a title, a category, an
   embedded PNG resource, and its native pixel size. `GuidesPage` and the
@@ -422,7 +429,14 @@ each contract to its container size in SCU. The `Haul` model holds the haul stat
 `GameState`, and seeds the shared route from those stops. A log reset, a shard
 change, and a PU exit clear hauling and the seeded route. They do not clear
 `cargo_lots`. The Hauling page stop board is still a page-local merge; it is
-not the RoutePlan.
+not the RoutePlan. Remaining collect/deliver work advances when the player
+presses Task Complete on the Operations NEXT card, Cargo Hauling STOPS, a
+haul card, or the overlay HUB/CARGO surfaces. Game.log pickup-complete is
+ignored for remaining work: it often fires on accept when you are already at
+the source, which is not cargo collected. Dropoff-complete still drops the
+deliver. If a contract scan names no collect, incomplete log pickups stay on
+the route so NEXT does not jump to Deliver. Contracted lots on Aboard are
+inventory, not haul progress.
 
 The Cargo Hauling page hosts Aboard above the contract cards. Aboard edits
 the cargo believed to be on the active hangar ship. Add a 0 SCU lot, then
@@ -445,8 +459,8 @@ location is unknown, pickups and buys rank before dropoffs and sells. Each
 
 The same record shape can hold a later mining, refinery, or blueprint
 action. `NextPlanner` does not call a provider. It does not use an AI model.
-Desktop and overlay surfaces do not bind to it yet. Skip-risk reasons are
-data on the route, not NEXT ranks.
+Operations shows the primary action as a NEXT card. The overlay HUB shows the
+same fold. Skip-risk reasons are data on the route, not NEXT ranks.
 
 ### Mission Guides
 `GuideCatalog` is the single list of curated guide images. Each entry names a

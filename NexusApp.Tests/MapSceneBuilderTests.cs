@@ -248,4 +248,32 @@ public class MapSceneBuilderTests
         var json = MapSceneBuilder.BuildPlayerMarker(543, live: false);
         Assert.Equal("{\"type\":\"playerMarker\",\"id\":543,\"live\":false}", json);
     }
+
+    [Fact]
+    public void BuildOperationRoute_SerializesTypeIdsAndCursor()
+    {
+        var json = MapSceneBuilder.BuildOperationRoute(new MapOperationRoute(new[] { 1, 2, 3 }, 1, 2));
+        Assert.Equal("{\"type\":\"operationRoute\",\"ids\":[1,2,3],\"current\":1,\"next\":2}", json);
+    }
+
+    [Fact]
+    public void BuildInit_EmptyOperation_SerializesEmptyIds()
+    {
+        var json = MapSceneBuilder.BuildInit(Catalog, "Stanton", EmptyPins,
+            tradeOn: false, guidesOn: false, miningOn: false, hangarOn: false, asteroidsOn: true,
+            selection: null, draft: Array.Empty<int>(), planner: Array.Empty<int>(), reduced: false);
+
+        Assert.Contains("\"operation\":{\"ids\":[],\"current\":null,\"next\":null}", json);
+    }
+
+    [Fact]
+    public void BuildInit_OperationProvided_SerializesIds()
+    {
+        var json = MapSceneBuilder.BuildInit(Catalog, "Stanton", EmptyPins,
+            tradeOn: false, guidesOn: false, miningOn: false, hangarOn: false, asteroidsOn: true,
+            selection: null, draft: Array.Empty<int>(), planner: Array.Empty<int>(), reduced: false,
+            operation: new MapOperationRoute(new[] { 10, 20 }, 10, 20));
+
+        Assert.Contains("\"operation\":{\"ids\":[10,20],\"current\":10,\"next\":20}", json);
+    }
 }
