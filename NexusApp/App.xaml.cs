@@ -143,11 +143,26 @@ public partial class App : Application
     {
         ActiveShipSync.Publish(GameState, Settings.Current.ActiveShipId, Data.GetHangarShips(), Market);
         PublishCargo();
+        RouteSync.PublishFromHauling(GameState);
     }
 
     public static void PublishCargo()
     {
         Data.PublishCargo();
+    }
+
+    public static event System.Action<HaulComplexity, string>? HaulingComplexityChanged;
+    public static void SetHaulingComplexity(HaulComplexity complexity, string source)
+    {
+        var stored = HaulPlanner.ToStored(complexity);
+        if (string.Equals(Settings.Current.HaulingComplexity, stored, StringComparison.OrdinalIgnoreCase))
+            return;
+        Settings.Current.HaulingComplexity = stored;
+        Settings.Save();
+        RouteSync.Complexity = complexity;
+        RouteSync.PublishFromHauling(GameState);
+        Logger.Info($"[HAUL] complexity {complexity} ({source})");
+        HaulingComplexityChanged?.Invoke(complexity, source);
     }
 
     // Ghost mode (issue #27): single write path so the Settings page toggle, the rail's
@@ -487,6 +502,9 @@ public partial class App : Application
         Map = Services.Map.MapCatalog.LoadEmbedded();
         Player = new PlayerPlace(Map, Locations);
         Logger.Info($"[MAP] geometry catalog loaded: {Map.Count} objects");
+        RouteSync.Map = Map;
+        RouteSync.Complexity = HaulPlanner.Parse(Settings.Current.HaulingComplexity);
+        RouteSync.PublishFromHauling(GameState);
 
         // Session Tracking + Auto-Track Blueprints are ALWAYS ON; there is no user toggle. The saved
         // Game.log path is already on the feed, so SetAutoMark(true) both enables auto-collect and

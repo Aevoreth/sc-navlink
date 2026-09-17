@@ -2,7 +2,7 @@ namespace NexusApp.Services;
 
 /// <summary>
 /// UI-free route snapshot rules: normalize, cursor, skip, insert, reorder.
-/// Distance sorting and complexity presets stay in later hauling work.
+/// Distance sorting and complexity presets live in HaulPlanner.
 /// </summary>
 internal static class RoutePlanMath
 {

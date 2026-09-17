@@ -228,13 +228,14 @@ public class HelpDialog : Window
             ]),
 
         new("dock:cargo", "Cargo Hauling",
-            "SC-navLink reads the hauling contracts you accept from Game.log and builds a consolidated collect-and-deliver plan across every active haul.",
+            "SC-navLink reads the hauling contracts you accept from Game.log and plans a this-run collect-and-deliver route against your active ship and a complexity preset.",
             [new("Auto-scan contracts", "switch"), new("⊕", "set contract region")],
             [
                 "Open the Cargo Hauling module in the app dock - contracts you accept in game appear automatically, no manual entry.",
-                "Active hauls show as cards with the contractor, route, and each collect / deliver leg. Each remaining leg has a Task Complete button.",
-                "Press Task Complete on the Operations NEXT card after you finish that step. The same button is on Cargo Hauling STOPS, overlay HUB NEXT, and overlay CARGO.",
-                "The Collect / deliver consolidation table groups every remaining leg by location, so you can fly one efficient route across all your hauls.",
+                "Active hauls show as cards with the contractor, route, and each collect / deliver leg. Each remaining leg has a Task Complete button. In plan / Held chips say whether that contract is on this run.",
+                "Set complexity on STOPS (Simple, Moderate, Complex, Advanced). The planner combines compatible contracts that fit the hangar active ship; leftovers are listed, not silently added to NEXT.",
+                "Press Task Complete on the Operations NEXT card after you finish that step. The same button is on Cargo Hauling STOPS, overlay HUB NEXT, and overlay CARGO. Completing a planned slice reduces remaining obligation and does not mark cargo aboard.",
+                "STOPS follows the shared this-run route. Trade sells can still appear on the board; they are not yet part of RoutePlan.",
                 "Finished hauls drop to the bottom with an outcome chip - Complete in green, other endings in amber.",
                 "Want reward, contractor, and cargo details? Scan the in-game Contracts screen: on the overlay HAULING tab, turn on Auto-scan contracts and click ⊕ Set contract detection region over the contract panel.",
                 "Contract scanning uses its own yellow detection box, separate from the magenta RS box - the two never interfere.",

@@ -153,4 +153,20 @@ public class StopBoardTests
         var board = StopBoard.Merge(Con(pickups: new[] { ("", "Titanium", 32) }), Array.Empty<AcceptedRoute>());
         Assert.Equal("", Assert.Single(board).Location);   // the page renders this as "Unknown"
     }
+
+    [Fact]
+    public void MergeRoute_FollowsPlanOrder_AndMergesSellsAtTheSamePlace()
+    {
+        var hauling = new GameHaulingState(
+            new[] { new GameHaulSummary("m1", "Red Wind", true, HaulOutcome.Active) },
+            new[] { new GameHaulStop("Everus Harbor", "Laranite", 16, "m1") },
+            new[] { new GameHaulStop("Area18", "Laranite", 16, "m1") });
+        var plan = RouteProjection.FromHauling(hauling);
+        var board = StopBoard.MergeRoute(plan, new[] { Route("Everus Harbor") });
+
+        Assert.Equal(new[] { "Everus Harbor", "Area18" }, board.Select(s => s.Location));
+        Assert.Equal(StopAction.Collect, board[0].Entries[0].Action);
+        Assert.Equal(StopAction.Sell, board[0].Entries[1].Action);
+        Assert.Equal(StopAction.Deliver, board[1].Entries.Single().Action);
+    }
 }

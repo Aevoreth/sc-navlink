@@ -326,4 +326,40 @@ public class HaulTrackerTests
         Assert.True(Assert.Single(t.ActiveHauls[0].ContractObjectives).PickupCompleted);
         Assert.Empty(t.BuildConsolidation().Pickups);
     }
+
+    [Fact]
+    public void CompletePlannedStop_SubtractsSlice_KeepsRemainingObligation_AndNoCargoLot()
+    {
+        var state = new GameState();
+        using var t = new HaulTracker(gameState: state);
+        SeedCarbonHaul(t);
+        t.ApplyContractDetails(RedWindCarbonOcr());
+
+        var slice = HaulPlanner.Plan(state.Hauling, HaulComplexity.Advanced, new HaulCapacity(16, 32));
+        state.PublishRoute(slice.Plan);
+        Assert.Equal(16, HaulPlanner.PlannedPickupScu(state.Route));
+
+        Assert.True(t.CompletePlannedStop(Mid, HaulRole.Pickup, "Ruin Station", "Carbon"));
+
+        var pickup = Assert.Single(state.Hauling.Pickups);
+        Assert.Equal(142, pickup.Scu);
+        Assert.Equal(142, Assert.Single(t.ActiveHauls[0].ContractObjectives).PickupRemaining);
+        Assert.False(t.ActiveHauls[0].ContractObjectives[0].PickupCompleted);
+        Assert.Equal(GameCargoState.Empty, state.Cargo);
+    }
+
+    [Fact]
+    public void SetStopCompleted_Reopen_RestoresFullRemaining()
+    {
+        var state = new GameState();
+        using var t = new HaulTracker(gameState: state);
+        SeedCarbonHaul(t);
+        t.ApplyContractDetails(RedWindCarbonOcr());
+        var slice = HaulPlanner.Plan(state.Hauling, HaulComplexity.Advanced, new HaulCapacity(16, 32));
+        state.PublishRoute(slice.Plan);
+        t.CompletePlannedStop(Mid, HaulRole.Pickup, "Ruin Station", "Carbon");
+
+        Assert.True(t.SetStopCompleted(Mid, HaulRole.Pickup, "Ruin Station", "Carbon", false));
+        Assert.Equal(158, Assert.Single(t.BuildConsolidation().Pickups).TotalScu);
+    }
 }

@@ -244,18 +244,20 @@ The view model controls these services. Each service holds little or no state.
   that is not a haul card. Destination is a free-text note on the lot. It is
   not linked to a haul stop or terminal yet; linking it stays on cargo lots
   (or splits of a lot), not on `GameHaulingState`.
-- **RoutePlan (RoutePlanMath / RouteProjection / RouteNextProjection)** - the
+- **RoutePlan (RoutePlanMath / HaulPlanner / RouteProjection / RouteNextProjection)** - the
   shared ordered route for the current operation. Stops can mix pickup,
   delivery, buy, and sell. Every stop is skippable. Items that would fail a
   contract if skipped carry `SkipRisk` and a reason so later UI can warn; this
   layer does not draw that glyph. Insert and reorder are snapshot operations
-  for later editors. The hauling seed copies incomplete contract stops into
-  the route; it does not invent a second obligation model. Hauling `StopBoard`
-  stays page-local. Trade pins are not merged yet. `RouteNextProjection` folds
-  the snapshot plus `NextPlanner` for Operations, Starmap, and the overlay
-  HUB. Starmap draws that ordered route as a cyan `operationRoute` polyline,
-  distinct from the MAP draft and Trade planner pairs. The Operations locator
-  stays player-only.
+  for later editors. `HaulPlanner` selects a feasible this-run subset from
+  remaining hauling obligations against the hangar active ship and a complexity
+  preset (Simple / Moderate / Complex / Advanced). The shared route is that
+  subset, not every accepted contract. Hauling `StopBoard` stays page-local for
+  sell pins; collect/deliver rows follow RoutePlan order. Trade pins are not
+  merged onto the route yet. `RouteNextProjection` folds the snapshot plus
+  `NextPlanner` for Operations, Starmap, and the overlay HUB. Starmap draws
+  that ordered route as a cyan `operationRoute` polyline, distinct from the MAP
+  draft and Trade planner pairs. The Operations locator stays player-only.
 - **GuideCatalog** - the single source of truth for the Mission Guides feature.
   Each entry is one curated guide image: an id, a title, a category, an
   embedded PNG resource, and its native pixel size. `GuidesPage` and the
@@ -426,12 +428,18 @@ adds the reward, the contractor, and the cargo details to the matching haul.
 recent server and shard list. `ContractCapCatalog` is an embedded table. It maps
 each contract to its container size in SCU. The `Haul` model holds the haul state.
 `HaulTracker` also publishes the active hauls and incomplete stops into
-`GameState`, and seeds the shared route from those stops. A log reset, a shard
-change, and a PU exit clear hauling and the seeded route. They do not clear
-`cargo_lots`. The Hauling page stop board is still a page-local merge; it is
-not the RoutePlan. Remaining collect/deliver work advances when the player
+`GameState`. `HaulPlanner` turns those remaining obligations into a capacity-
+aware this-run `RoutePlan` using the hangar active ship and the Hauling
+complexity preset. Contracts that do not fit the hull or the preset stay on
+haul cards as held work; they are not silently published onto NEXT or the
+Starmap. A log reset, a shard change, and a PU exit clear hauling and the
+seeded route. They do not clear `cargo_lots`. The Hauling page stop board is
+still a page-local merge for trade sells; collect/deliver rows follow the
+shared RoutePlan. Remaining collect/deliver work advances when the player
 presses Task Complete on the Operations NEXT card, Cargo Hauling STOPS, a
-haul card, or the overlay HUB/CARGO surfaces. Game.log pickup-complete is
+haul card, or the overlay HUB/CARGO surfaces. Task Complete on a planned
+action subtracts that action's planned SCU from the remaining obligation and
+does not write cargo lots. Game.log pickup-complete is
 ignored for remaining work: it often fires on accept when you are already at
 the source, which is not cargo collected. Dropoff-complete still drops the
 deliver. If a contract scan names no collect, incomplete log pickups stay on
@@ -447,8 +455,9 @@ often larger than the grid for maneuvering. Off-Grid and Contracted are
 pills on the lot row. A lot may be marked Contracted; that flag does not
 create or bind a haul card. Destination is a user note on the lot, not a
 linked stop. Linking that note (or splitting lots by destination) stays
-off haul cards until a later issue. COMMITTED still counts
-accepted contract and route SCU against the Trade planner ship.
+off haul cards until a later issue. COMMITTED counts remaining
+accepted contract and route SCU against the hangar active ship's usable
+cargo. Complexity presets live on the Cargo Hauling STOPS panel.
 
 ### NEXT (hauling rule set)
 `NextPlanner` reads location from `GameState`. When the route slice has stops,

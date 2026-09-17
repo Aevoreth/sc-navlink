@@ -187,6 +187,10 @@ public class AppSettings
     // SHIPS page sub-tab last open (browser/hangar/loadout).
     public string ShipsActiveFlow { get; set; } = "browser";
 
+    // Cargo Hauling planner complexity (issue #29). SIMPLE / MODERATE / COMPLEX / ADVANCED.
+    // Default MODERATE: combine contracts that share an origin or destination.
+    public string HaulingComplexity { get; set; } = "MODERATE";
+
     // USE WALLET on the planner's BUDGET filter: while on, the budget tracks the live wallet
     // estimate instead of a typed figure (2026-08-10). Persisted, unlike the budget VALUE it
     // drives, which stays a session field: a hauler who plans against their wallet wants that to

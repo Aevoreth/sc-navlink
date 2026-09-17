@@ -11,6 +11,14 @@ public sealed class ContractObjective
     // fire ObjectiveCompleted, and the OCR path used to ignore completed log legs).
     public bool PickupCompleted { get; set; }
     public bool DropoffCompleted { get; set; }
+
+    // Remaining contractual SCU for this objective. Null means the full Scu is still due.
+    // Independent of CargoState lots.
+    public int? PickupRemainingScu { get; set; }
+    public int? DropoffRemainingScu { get; set; }
+
+    public int PickupRemaining => PickupCompleted ? 0 : PickupRemainingScu ?? Scu;
+    public int DropoffRemaining => DropoffCompleted ? 0 : DropoffRemainingScu ?? Scu;
 }
 
 // A hauling contract's full detail, parsed from the Contracts panel. No player identity.

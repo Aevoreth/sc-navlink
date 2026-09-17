@@ -75,4 +75,58 @@ public static class StopBoard
         }
         return result;
     }
+
+    /// <summary>
+    /// This-run collect/deliver from the shared RoutePlan, with page-local sell pins merged in.
+    /// Plan stop order is preserved; sells at a new place append.
+    /// </summary>
+    public static IReadOnlyList<BoardStop> MergeRoute(GameRoutePlan plan, IReadOnlyList<AcceptedRoute> routes)
+    {
+        ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(routes);
+
+        var order = new List<string>();
+        var byLocation = new Dictionary<string, List<StopEntry>>(StringComparer.OrdinalIgnoreCase);
+
+        void Add(string? location, StopAction action, string commodity, int scu, string? missionId = null)
+        {
+            var key = (location ?? "").Trim();
+            if (!byLocation.TryGetValue(key, out var list))
+            {
+                byLocation[key] = list = new List<StopEntry>();
+                order.Add(key);
+            }
+            list.Add(new StopEntry(action, commodity, scu, missionId));
+        }
+
+        foreach (var stop in plan.Stops)
+        {
+            foreach (var action in stop.Actions)
+            {
+                if (action.RemainingScu <= 0) continue;
+                var mapped = action.Kind switch
+                {
+                    GameRouteActionKind.Pickup => StopAction.Collect,
+                    GameRouteActionKind.Delivery => StopAction.Deliver,
+                    _ => (StopAction?)null,
+                };
+                if (mapped is null) continue;
+                Add(stop.Location.Label, mapped.Value, action.Commodity, action.RemainingScu, action.ObjectiveRef);
+            }
+        }
+
+        foreach (var r in routes)
+        {
+            if (r.Stage == AcceptedStage.Sold) continue;
+            Add(r.SellTerminalName, StopAction.Sell, r.CommodityName, r.ActualQty ?? r.TripQty);
+        }
+
+        var result = new List<BoardStop>(order.Count);
+        foreach (var key in order)
+        {
+            var entries = byLocation[key].OrderBy(e => (int)e.Action).ToList();
+            result.Add(new BoardStop(key, entries));
+        }
+        return result;
+    }
 }
