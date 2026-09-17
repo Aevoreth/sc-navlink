@@ -77,6 +77,23 @@ public sealed class HaulTracker : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Subtract this-run planned SCU from a remaining obligation. When the route has no matching
+    /// slice, the full remaining amount is marked done. Does not write cargo lots.
+    /// </summary>
+    public bool CompletePlannedStop(string missionId, HaulRole role, string? location, string? commodity)
+    {
+        var slice = PlannedSlice(GameState?.Route, missionId, role, location, commodity);
+        if (slice is int scu && scu > 0)
+        {
+            if (!ApplyStopProgress(missionId, role, location, commodity, scu)) return false;
+            RaiseChanged();
+            return true;
+        }
+
+        return SetStopCompleted(missionId, role, location, commodity, completed: true);
+    }
+
     /// <summary>Mark several remaining stops in one publish so NEXT reseeds once.</summary>
     public bool SetStopsCompleted(
         IEnumerable<(string MissionId, HaulRole Role, string? Location, string? Commodity)> stops,
@@ -102,7 +119,7 @@ public sealed class HaulTracker : IDisposable
             _ => (HaulRole?)null,
         };
         if (role is null) return false;
-        return SetStopCompleted(action.MissionId, role.Value, action.Location, action.Objective, completed: true);
+        return CompletePlannedStop(action.MissionId, role.Value, action.Location, action.Objective);
     }
 
     /// <summary>OCR collect is done only when the player marked it. Game.log pickup-complete is not cargo collected.</summary>
@@ -158,13 +175,13 @@ public sealed class HaulTracker : IDisposable
                 var addedOcrPickup = false;
                 foreach (var o in h.ContractObjectives)
                 {
-                    if (!string.IsNullOrWhiteSpace(o.Pickup) && !o.PickupCompleted)
+                    if (!string.IsNullOrWhiteSpace(o.Pickup) && o.PickupRemaining > 0)
                     {
-                        AddItem(pickups, o.Pickup, o.Commodity, o.Scu, h.MissionId);
+                        AddItem(pickups, o.Pickup, o.Commodity, o.PickupRemaining, h.MissionId);
                         addedOcrPickup = true;
                     }
-                    if (!string.IsNullOrWhiteSpace(o.Dropoff) && !ObjectiveDropoffComplete(h, o))
-                        AddItem(dropoffs, o.Dropoff, o.Commodity, o.Scu, h.MissionId);
+                    if (!string.IsNullOrWhiteSpace(o.Dropoff) && o.DropoffRemaining > 0)
+                        AddItem(dropoffs, o.Dropoff, o.Commodity, o.DropoffRemaining, h.MissionId);
                 }
 
                 // OCR often reads Deliver and misses Collect. If no collect remains named, keep
@@ -176,7 +193,9 @@ public sealed class HaulTracker : IDisposable
                         if (leg.Role != HaulRole.Pickup || leg.Completed) continue;
                         var sib = h.Legs.Find(l => l.Role == HaulRole.Dropoff && l.CargoKey == leg.CargoKey);
                         var name = string.IsNullOrWhiteSpace(h.PickupName) ? "Pickup (TBD)" : h.PickupName;
-                        AddItem(pickups, name, sib?.Commodity ?? "", sib?.TargetScu ?? 0, h.MissionId);
+                        var remaining = PickupLegRemaining(leg, sib);
+                        if (remaining > 0)
+                            AddItem(pickups, name, sib?.Commodity ?? "", remaining, h.MissionId);
                     }
                 }
                 continue;
@@ -186,15 +205,18 @@ public sealed class HaulTracker : IDisposable
             {
                 if (leg.Completed) continue;
 
-                if (leg.Role == HaulRole.Dropoff && leg.TargetScu > 0)
-                    AddItem(dropoffs, leg.Destination, leg.Commodity, leg.TargetScu, h.MissionId);
+                if (leg.Role == HaulRole.Dropoff)
+                {
+                    var remaining = LegRemaining(leg);
+                    if (remaining > 0)
+                        AddItem(dropoffs, leg.Destination, leg.Commodity, remaining, h.MissionId);
+                }
 
                 if (leg.Role == HaulRole.Pickup)
                 {
-                    // Borrow commodity/SCU from the sibling dropoff that shares this CargoKey.
                     var sib = h.Legs.Find(l => l.Role == HaulRole.Dropoff && l.CargoKey == leg.CargoKey);
                     var name = string.IsNullOrWhiteSpace(h.PickupName) ? "Pickup (TBD)" : h.PickupName;
-                    AddItem(pickups, name, sib?.Commodity ?? "", sib?.TargetScu ?? 0, h.MissionId);
+                    AddItem(pickups, name, sib?.Commodity ?? "", PickupLegRemaining(leg, sib), h.MissionId);
                 }
             }
         }
@@ -435,6 +457,8 @@ public sealed class HaulTracker : IDisposable
                 if (prev is null) continue;
                 n.PickupCompleted = prev.PickupCompleted;
                 n.DropoffCompleted = prev.DropoffCompleted;
+                n.PickupRemainingScu = prev.PickupRemainingScu;
+                n.DropoffRemainingScu = prev.DropoffRemainingScu;
             }
             h.ContractObjectives = d.Objectives;
         }
@@ -453,8 +477,10 @@ public sealed class HaulTracker : IDisposable
                 if (string.IsNullOrWhiteSpace(o.Pickup)) continue;
                 if (!string.IsNullOrWhiteSpace(location) && !LocationEq(o.Pickup, location)) continue;
                 if (!CommodityMatches(commodity, o.Commodity)) continue;
-                if (o.PickupCompleted == completed) continue;
+                var remaining = completed ? 0 : (int?)null;
+                if (o.PickupCompleted == completed && o.PickupRemainingScu == remaining) continue;
                 o.PickupCompleted = completed;
+                o.PickupRemainingScu = remaining;
                 changed = true;
             }
             else
@@ -462,8 +488,10 @@ public sealed class HaulTracker : IDisposable
                 if (string.IsNullOrWhiteSpace(o.Dropoff)) continue;
                 if (!string.IsNullOrWhiteSpace(location) && !LocationEq(o.Dropoff, location)) continue;
                 if (!CommodityMatches(commodity, o.Commodity)) continue;
-                if (o.DropoffCompleted == completed) continue;
+                var remaining = completed ? 0 : (int?)null;
+                if (o.DropoffCompleted == completed && o.DropoffRemainingScu == remaining) continue;
                 o.DropoffCompleted = completed;
+                o.DropoffRemainingScu = remaining;
                 changed = true;
             }
         }
@@ -472,8 +500,10 @@ public sealed class HaulTracker : IDisposable
         {
             if (leg.Role != role) continue;
             if (!LegMatchesStop(h, leg, location, commodity)) continue;
-            if (leg.Completed == completed) continue;
+            var remaining = completed ? 0 : (int?)null;
+            if (leg.Completed == completed && leg.RemainingScu == remaining) continue;
             leg.Completed = completed;
+            leg.RemainingScu = remaining;
             changed = true;
         }
 
@@ -483,6 +513,91 @@ public sealed class HaulTracker : IDisposable
         var where = string.IsNullOrWhiteSpace(location) ? "" : $" @ {location.Trim()}";
         Logger.Info($"[HAUL] user {verb} {role}{what}{where}: {h.Company}");
         return true;
+    }
+
+    private bool ApplyStopProgress(string missionId, HaulRole role, string? location, string? commodity, int amount)
+    {
+        if (amount <= 0) return false;
+        if (!_byId.TryGetValue(missionId, out var h) || !h.IsActive) return false;
+        var changed = false;
+
+        foreach (var o in h.ContractObjectives)
+        {
+            if (role == HaulRole.Pickup)
+            {
+                if (string.IsNullOrWhiteSpace(o.Pickup)) continue;
+                if (!string.IsNullOrWhiteSpace(location) && !LocationEq(o.Pickup, location)) continue;
+                if (!CommodityMatches(commodity, o.Commodity)) continue;
+                var now = o.PickupRemaining;
+                if (now <= 0) continue;
+                var next = Math.Max(0, now - amount);
+                o.PickupRemainingScu = next;
+                o.PickupCompleted = next == 0;
+                changed = true;
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(o.Dropoff)) continue;
+                if (!string.IsNullOrWhiteSpace(location) && !LocationEq(o.Dropoff, location)) continue;
+                if (!CommodityMatches(commodity, o.Commodity)) continue;
+                var now = o.DropoffRemaining;
+                if (now <= 0) continue;
+                var next = Math.Max(0, now - amount);
+                o.DropoffRemainingScu = next;
+                o.DropoffCompleted = next == 0;
+                changed = true;
+            }
+        }
+
+        foreach (var leg in h.Legs)
+        {
+            if (leg.Role != role) continue;
+            if (!LegMatchesStop(h, leg, location, commodity)) continue;
+            var sib = h.Legs.Find(l => l.Role == HaulRole.Dropoff && l.CargoKey == leg.CargoKey);
+            var now = role == HaulRole.Pickup ? PickupLegRemaining(leg, sib) : LegRemaining(leg);
+            if (now <= 0) continue;
+            var next = Math.Max(0, now - amount);
+            leg.RemainingScu = next;
+            leg.Completed = next == 0;
+            changed = true;
+        }
+
+        if (!changed) return false;
+        var what = string.IsNullOrWhiteSpace(commodity) ? "" : $" {commodity.Trim()}";
+        var where = string.IsNullOrWhiteSpace(location) ? "" : $" @ {location.Trim()}";
+        Logger.Info($"[HAUL] user progressed {role}{what}{where} by {amount} SCU: {h.Company}");
+        return true;
+    }
+
+    internal static int? PlannedSlice(
+        GameRoutePlan? route, string missionId, HaulRole role, string? location, string? commodity)
+    {
+        if (route is null || !route.HasStops) return null;
+        var kind = role == HaulRole.Pickup ? GameRouteActionKind.Pickup : GameRouteActionKind.Delivery;
+        foreach (var stop in route.Stops)
+        {
+            if (!string.IsNullOrWhiteSpace(location) && !LocationEq(stop.Location.Label, location)) continue;
+            foreach (var action in stop.Actions)
+            {
+                if (action.Kind != kind) continue;
+                if (!string.Equals(action.ObjectiveRef, missionId, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!CommodityMatches(commodity, action.Commodity)) continue;
+                if (action.RemainingScu > 0) return action.RemainingScu;
+            }
+        }
+
+        return null;
+    }
+
+    private static int LegRemaining(HaulLeg leg)
+        => leg.Completed ? 0 : leg.RemainingScu ?? leg.TargetScu;
+
+    private static int PickupLegRemaining(HaulLeg pickup, HaulLeg? sibling)
+    {
+        if (pickup.Completed) return 0;
+        if (pickup.RemainingScu is int remaining) return remaining;
+        if (sibling is null) return 0;
+        return LegRemaining(sibling);
     }
 
     private static bool LegMatchesStop(Haul h, HaulLeg leg, string? location, string? commodity)
@@ -558,7 +673,7 @@ public sealed class HaulTracker : IDisposable
         for (int i = 0; i < _order.Count; i++)
         {
             var h = _order[i];
-            hauls[i] = new GameHaulSummary(h.MissionId, h.Company, h.IsActive, h.Outcome);
+            hauls[i] = new GameHaulSummary(h.MissionId, h.Company, h.IsActive, h.Outcome, h.ContainerCap);
         }
 
         var con = BuildConsolidation();

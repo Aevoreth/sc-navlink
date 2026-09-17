@@ -61,7 +61,8 @@ public sealed record GameHaulSummary(
     string MissionId,
     string Company,
     bool IsActive,
-    HaulOutcome Outcome);
+    HaulOutcome Outcome,
+    int? ContainerCap = null);
 
 /// <summary>
 /// Immutable hauling slice published into <see cref="GameState"/>.

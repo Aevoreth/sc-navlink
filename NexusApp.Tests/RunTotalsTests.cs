@@ -175,10 +175,12 @@ public class RunTotalsTests
 
     // COMMITTED measures against the hull the user picked in the planner, not a default.
     [Fact]
-    public void CargoHauling_MeasuresAgainstThePlannersShip()
+    public void CargoHauling_MeasuresAgainstTheActiveShip()
     {
         var src = SourceFiles.ReadAppSource(@"Views\HaulingPage.cs");
-        Assert.Contains("Ships.ById(App.Settings.Current.TradeShipId)", src);
+        Assert.Contains("App.GameState.ActiveShip", src);
+        Assert.Contains("ship.UsableCargoScu", src);
+        Assert.DoesNotContain("Ships.ById(App.Settings.Current.TradeShipId)", src);
     }
 
     // The page renders all three new sections, in the spec's order.

@@ -55,19 +55,14 @@ public sealed class HaulingPage : UserControl
     private FontFamily Mono => _mono ??= (FontFamily)Application.Current.FindResource("MonoFont");
     private FontFamily Disp => _disp ??= (FontFamily)Application.Current.FindResource("DisplayFont");
 
-    // The TRADE ship list (~90 flyable hulls with cargo space), the same catalog and the same
-    // selection the route planner uses, so COMMITTED measures against the hull the user actually
-    // picked. Lazy: only the COMMITTED panel needs it, and a page opened on an empty state never
-    // pays the embedded-JSON parse.
-    private TradeShipCatalog? _ships;
-    private TradeShipCatalog Ships => _ships ??= TradeShipCatalog.LoadEmbedded();
-
     public HaulingPage()
     {
         Build();
         Refresh();
         InteractionLog.Nav("Cargo Hauling");
         App.Hauls.Changed += () => Dispatcher.Invoke(Refresh);
+        App.HaulingComplexityChanged += (_, _) => Dispatcher.BeginInvoke(() => { if (IsVisible) Refresh(); });
+        App.GameState.ActiveShipChanged += () => Dispatcher.BeginInvoke(() => { if (IsVisible) Refresh(); });
         // The STOPS board's ordering, distances and "nearest first" claim withdraw with the
         // session (D3, 2026-08-17), and no haul event fires when the game merely exits - without
         // this the board kept its live dressing until the next haul change or page re-entry.
@@ -492,6 +487,23 @@ public sealed class HaulingPage : UserControl
               + "(overlay, HAULING tab) lets Nexus read it from the contract panel.";
         nameStack.Children.Add(capChip);
 
+        var plan = CurrentHaulPlan();
+        if (plan.IsSelected(h.MissionId))
+        {
+            var inPlan = Hud.Chip(Cyan, "In plan");
+            inPlan.Margin = new Thickness(6, 0, 0, 0);
+            inPlan.VerticalAlignment = VerticalAlignment.Center;
+            nameStack.Children.Add(inPlan);
+        }
+        else if (plan.HoldFor(h.MissionId) is { } hold)
+        {
+            var held = Hud.Chip(_amber, HoldChip(hold.Reason));
+            held.Margin = new Thickness(6, 0, 0, 0);
+            held.VerticalAlignment = VerticalAlignment.Center;
+            held.ToolTip = HoldTooltip(hold.Reason);
+            nameStack.Children.Add(held);
+        }
+
         Grid.SetColumn(nameStack, 0); titleRow.Children.Add(nameStack);
 
         if (h.Reward > 0)
@@ -585,7 +597,7 @@ public sealed class HaulingPage : UserControl
         if (!leg.Completed)
         {
             var btn = Hud.TaskCompleteButton(
-                () => App.Hauls.SetStopCompleted(h.MissionId, leg.Role, location, commodity, true),
+                () => App.Hauls.CompletePlannedStop(h.MissionId, leg.Role, location, commodity),
                 compact: true);
             btn.Margin = new Thickness(10, 0, 0, 0);
             Grid.SetColumn(btn, 2); grid.Children.Add(btn);
@@ -646,7 +658,9 @@ public sealed class HaulingPage : UserControl
         var label = role == HaulRole.Pickup ? "Collect" : "Deliver";
         var place = role == HaulRole.Pickup ? o.Pickup : o.Dropoff;
         var segs = new List<string>();
-        if (o.Scu > 0) segs.Add($"{o.Scu} SCU");
+        var remaining = role == HaulRole.Pickup ? o.PickupRemaining : o.DropoffRemaining;
+        if (remaining > 0) segs.Add($"{remaining} SCU");
+        else if (o.Scu > 0) segs.Add($"{o.Scu} SCU");
         if (!string.IsNullOrWhiteSpace(o.Commodity)) segs.Add(o.Commodity);
         segs.Add(role == HaulRole.Pickup ? $"from {place}" : $"-> {place}");
 
@@ -669,7 +683,7 @@ public sealed class HaulingPage : UserControl
         if (!done)
         {
             var btn = Hud.TaskCompleteButton(
-                () => App.Hauls.SetStopCompleted(h.MissionId, role, place, o.Commodity, true),
+                () => App.Hauls.CompletePlannedStop(h.MissionId, role, place, o.Commodity),
                 compact: true);
             btn.Margin = new Thickness(10, 0, 0, 0);
             Grid.SetColumn(btn, 2); grid.Children.Add(btn);
@@ -736,28 +750,21 @@ public sealed class HaulingPage : UserControl
 
     private void RenderStops()
     {
-        var stops = StopBoard.Merge(App.Hauls.BuildConsolidation(), App.Settings.Current.PinnedRoutes);
-
-        // App review 2026-08-01: these stops used to render in dictionary insertion order, which is
-        // the order contracts happened to be accepted in - meaningless to a hauler planning a run.
-        // Now ordered nearest-first when a LIVE session places the player (D3, 2026-08-17: nearest
-        // is a claim about now, and LastKnownLocation never clears, so the measuring read is gated
-        // on the process probe). With no measurable position the board falls back to by-place
-        // (alphabetical), the one order that stays meaningful with the game closed - acceptance
-        // order meant nothing, and sorting by distance from nowhere would be theatre.
+        var plan = CurrentHaulPlan();
+        var stops = StopBoard.MergeRoute(App.GameState.Route, App.Settings.Current.PinnedRoutes);
         bool live = App.GameLogFeed.IsSessionLive;
         var here = App.Player.MeasureFrom(live);
-        var ordered = here is null
-            ? ConsolidationOrder.ByPlace(stops, s => s.Location)
-            : ConsolidationOrder.ByDistanceFrom(stops, s => s.Location, App.Map, here);
 
         var bodyStack = new StackPanel();
-        bodyStack.Children.Add(PanelHeaderBar($"Stops · {ordered.Count}",
-            here is null ? "everything that happens at each place, by place" : "everything that happens at each place, nearest first"));
+        bodyStack.Children.Add(PanelHeaderBar($"Stops · {stops.Count}",
+            "this-run plan order, sells stay page-local"));
+        bodyStack.Children.Add(ComplexityRow(plan));
+        if (plan.Holds.Count > 0)
+            bodyStack.Children.Add(HoldWarning(plan));
 
-        if (ordered.Count == 0)
+        if (stops.Count == 0)
         {
-            bodyStack.Children.Add(new Border { Padding = new Thickness(14, 10, 14, 14), Child = MutedLine("Nothing to collect, deliver or sell yet.") });
+            bodyStack.Children.Add(new Border { Padding = new Thickness(14, 10, 14, 14), Child = MutedLine("Nothing to collect, deliver or sell on this run yet.") });
             var empty = Hud.Panel(bodyStack, padding: new Thickness(0));
             empty.Margin = new Thickness(0, 16, 0, 0);
             _body.Children.Add(empty);
@@ -765,11 +772,11 @@ public sealed class HaulingPage : UserControl
         }
 
         var table = new Grid { Margin = new Thickness(14, 10, 14, 12) };
-        table.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.4, GridUnitType.Star) }); // Location
-        table.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                         // Action
-        table.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });    // Commodity
-        table.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                         // SCU
-        table.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                         // Task Complete
+        table.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1.4, GridUnitType.Star) });
+        table.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        table.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        table.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        table.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         table.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         AddCell(table, 0, 0, HeaderCell("LOCATION", false));
@@ -778,11 +785,8 @@ public sealed class HaulingPage : UserControl
         AddCell(table, 0, 3, HeaderCell("SCU", true));
         AddCell(table, 0, 4, HeaderCell("", false));
 
-        // The distance is appended to the LOCATION cell only on the first row of each stop, so a
-        // stop with four commodities does not repeat it four times. Null (unplaceable stop, or no
-        // session) renders exactly as before.
         var rowIdx = 1;
-        foreach (var s in ordered)
+        foreach (var s in stops)
         {
             var dist = ConsolidationOrder.DistanceTo(s.Location, App.Map, here);
             bool first = true;
@@ -795,9 +799,6 @@ public sealed class HaulingPage : UserControl
         }
 
         bodyStack.Children.Add(table);
-        // The withheld note (D3, 2026-08-17): with the game closed the rows above carry no
-        // distance and the order stops claiming nearest - one dim italic line per panel says why,
-        // the mock's paneNote, never a line per row.
         if (!live)
             bodyStack.Children.Add(new Border
             {
@@ -857,7 +858,7 @@ public sealed class HaulingPage : UserControl
         {
             var role = action == StopAction.Collect ? HaulRole.Pickup : HaulRole.Dropoff;
             var btn = Hud.TaskCompleteButton(
-                () => App.Hauls.SetStopCompleted(missionId, role, location, commodity, completed: true),
+                () => App.Hauls.CompletePlannedStop(missionId, role, location, commodity),
                 compact: true);
             btn.Margin = new Thickness(12, 2, 0, 2);
             AddCell(table, row, 4, btn);
@@ -941,20 +942,19 @@ public sealed class HaulingPage : UserControl
         return Hud.Panel(stack, padding: new Thickness(0));
     }
 
-    /// <summary>COMMITTED: the SCU your accepted work commits you to, against the ship selected in
-    /// the planner. This is obligation math, not hold inventory. What is aboard the active hangar
-    /// ship lives on <c>GameCargoState</c> and is edited in the Aboard panel above.</summary>
+    /// <summary>COMMITTED: remaining contractual SCU plus accepted trade routes, against the
+    /// hangar active ship. This is obligation math, not hold inventory. What is aboard lives on
+    /// GameCargoState and is edited in the Aboard panel above. The this-run RoutePlan may hold
+    /// contracts that do not fit this hull.</summary>
     private Grid BuildCommittedPanel(out CommittedLoad load)
     {
-        // Pickups only: every contract leg appears twice in the consolidation, once to collect and
-        // once to deliver, so counting both sides would double every contract's load.
         var contractScu = App.Hauls.BuildConsolidation().Pickups.Sum(p => p.TotalScu);
-        var ship = Ships.ById(App.Settings.Current.TradeShipId);
-        load = RunTotals.Committed(App.Settings.Current.PinnedRoutes, contractScu, ship?.TotalScu);
+        var ship = App.GameState.ActiveShip;
+        load = RunTotals.Committed(App.Settings.Current.PinnedRoutes, contractScu, ship.UsableCargoScu);
 
         var stack = new StackPanel();
         stack.Children.Add(PanelHeaderBar("Committed",
-            ship is null ? "no ship selected" : $"against {ship.DisplayName}"));
+            ship.HasShip ? $"against {ship.DisplayName}" : "set active ship in Ships"));
 
         var body = new StackPanel { Margin = new Thickness(14, 10, 14, 12) };
         body.Children.Add(new TextBlock
@@ -965,17 +965,17 @@ public sealed class HaulingPage : UserControl
         body.Children.Add(SplitLine("ROUTES", load.RouteScu));
         body.Children.Add(SplitLine("CONTRACTS", load.ContractScu));
 
-        if (ship is null)
-            body.Children.Add(MutedLine("Pick a ship in the planner to see whether this fits in one run."));
+        if (!ship.HasShip)
+            body.Children.Add(MutedLine("Set an active ship in Ships to see whether this fits in one run."));
         else if (load.ExceedsOneRun)
             body.Children.Add(new TextBlock
             {
-                Text = $"Needs {load.Runs} runs. {ship.DisplayName} carries {ship.TotalScu:N0} SCU.",
+                Text = $"Needs {load.Runs} runs. {ship.DisplayName} carries {ship.UsableCargoScu:N0} SCU.",
                 FontFamily = Mono, FontSize = 11.5, Foreground = new SolidColorBrush(_amber),
                 Margin = new Thickness(0, 4, 0, 0), TextWrapping = TextWrapping.Wrap,
             });
         else
-            body.Children.Add(MutedLine($"{ship.DisplayName} carries {ship.TotalScu:N0} SCU."));
+            body.Children.Add(MutedLine($"{ship.DisplayName} carries {ship.UsableCargoScu:N0} SCU."));
 
         stack.Children.Add(body);
         return Hud.Panel(stack, padding: new Thickness(0));
@@ -1146,6 +1146,87 @@ public sealed class HaulingPage : UserControl
         wrap.Children.Add(new Border { Height = 1, Background = Br("NavBorderBrush") });
         return wrap;
     }
+
+    private static HaulPlanResult CurrentHaulPlan()
+        => HaulPlanner.Plan(App.GameState, HaulPlanner.Parse(App.Settings.Current.HaulingComplexity), App.Map);
+
+    private UIElement ComplexityRow(HaulPlanResult plan)
+    {
+        _ = plan;
+        var active = HaulPlanner.Parse(App.Settings.Current.HaulingComplexity);
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(14, 0, 14, 8),
+        };
+        row.Children.Add(new TextBlock
+        {
+            Text = "COMPLEXITY", FontFamily = Mono, FontSize = 9.5, FontWeight = FontWeights.Bold,
+            Foreground = Br("FgDimBrush"), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0),
+        });
+        foreach (var value in new[] { HaulComplexity.Simple, HaulComplexity.Moderate, HaulComplexity.Complex, HaulComplexity.Advanced })
+            row.Children.Add(ComplexityPill(value, value == active));
+        return row;
+    }
+
+    private Border ComplexityPill(HaulComplexity value, bool on)
+    {
+        var pill = new Border
+        {
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(3),
+            Padding = new Thickness(7, 2, 7, 2),
+            Margin = new Thickness(0, 0, 6, 0),
+            Cursor = Cursors.Hand,
+            Child = new TextBlock
+            {
+                Text = value.ToString().ToUpperInvariant(),
+                FontFamily = Mono, FontSize = 9.5, FontWeight = FontWeights.Bold,
+            },
+        };
+        SetComplexityPillOn(pill, on);
+        pill.MouseLeftButtonUp += (_, _) => App.SetHaulingComplexity(value, "hauling");
+        return pill;
+    }
+
+    private void SetComplexityPillOn(Border pill, bool on)
+    {
+        var text = (TextBlock)pill.Child;
+        text.Foreground = on ? Br("AccentBrush") : Br("FgDimBrush");
+        pill.BorderBrush = on ? Br("AccentStrongBrush") : Br("NavBorderBrush");
+        pill.Background = on ? Br("AccentFaintBrush") : Br("Bg2NavBrush");
+    }
+
+    private UIElement HoldWarning(HaulPlanResult plan)
+    {
+        var counts = plan.Holds.GroupBy(h => h.Reason).Select(g => $"{g.Count()} {HoldChip(g.Key).ToLowerInvariant()}").ToList();
+        return new TextBlock
+        {
+            Text = counts.Count == 1
+                ? $"{counts[0]} held off this run."
+                : $"{plan.Holds.Count} contracts held off this run ({string.Join(", ", counts)}).",
+            FontFamily = Mono, FontSize = 11.5, Foreground = new SolidColorBrush(_amber),
+            Margin = new Thickness(14, 0, 14, 8), TextWrapping = TextWrapping.Wrap,
+        };
+    }
+
+    private static string HoldChip(HaulHoldReason reason) => reason switch
+    {
+        HaulHoldReason.Capacity => "Held (capacity)",
+        HaulHoldReason.Complexity => "Held (complexity)",
+        HaulHoldReason.StopCap => "Held (cap)",
+        HaulHoldReason.ContainerCap => "Held (box)",
+        _ => "Held",
+    };
+
+    private static string HoldTooltip(HaulHoldReason reason) => reason switch
+    {
+        HaulHoldReason.Capacity => "This contract does not fit the active ship's usable cargo this run.",
+        HaulHoldReason.Complexity => "The current complexity preset does not allow this contract on the same run.",
+        HaulHoldReason.StopCap => "Adding this contract would exceed the stop or contract cap for this preset.",
+        HaulHoldReason.ContainerCap => "This contract's container size is larger than the active ship can carry.",
+        _ => "Held off this run.",
+    };
 
     // Small progress pip: filled teal when the step is done, hollow outline while pending.
     private UIElement StatusDot(bool done) => new Border

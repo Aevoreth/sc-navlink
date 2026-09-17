@@ -24,6 +24,10 @@ public sealed class HaulLeg
     public int TargetScu { get; set; }                // dropoff only
     public string Destination { get; set; } = "";     // dropoff only (the "to <X>")
     public bool Completed { get; set; }
+
+    // Remaining SCU on this log leg. Null means TargetScu is still due. Pickup legs borrow
+    // the sibling dropoff remaining in consolidation.
+    public int? RemainingScu { get; set; }
 }
 
 public sealed class Haul

@@ -1,16 +1,28 @@
+using NexusApp.Services.Map;
+
 namespace NexusApp.Services;
 
 /// <summary>
-/// Projects contract stops into the shared route snapshot.
-/// Pickup locations come first, then dropoffs; the same place merges into one stop.
-/// This is a seed order, not a planner.
+/// Projects contract stops into a route snapshot.
+/// Pickup locations come first, then dropoffs, unless a location order is supplied.
+/// The same place merges into one stop. Live seeding goes through HaulPlanner.
 /// </summary>
 internal static class RouteProjection
 {
     public static GameRoutePlan FromHauling(GameHaulingState hauling)
     {
         ArgumentNullException.ThrowIfNull(hauling);
-        if (hauling.Pickups.Count == 0 && hauling.Dropoffs.Count == 0)
+        return FromStops(hauling.Pickups, hauling.Dropoffs);
+    }
+
+    public static GameRoutePlan FromStops(
+        IReadOnlyList<GameHaulStop> pickups,
+        IReadOnlyList<GameHaulStop> dropoffs,
+        IReadOnlyList<string>? locationOrder = null)
+    {
+        ArgumentNullException.ThrowIfNull(pickups);
+        ArgumentNullException.ThrowIfNull(dropoffs);
+        if (pickups.Count == 0 && dropoffs.Count == 0)
             return GameRoutePlan.Empty;
 
         var order = new List<string>();
@@ -49,17 +61,37 @@ internal static class RouteProjection
             list.Add(action);
         }
 
-        foreach (var stop in hauling.Pickups)
+        foreach (var stop in pickups)
             Add(stop, GameRouteActionKind.Pickup);
-        foreach (var stop in hauling.Dropoffs)
+        foreach (var stop in dropoffs)
             Add(stop, GameRouteActionKind.Delivery);
 
         if (order.Count == 0) return GameRoutePlan.Empty;
 
-        var stops = new GameRouteStop[order.Count];
-        for (var i = 0; i < order.Count; i++)
+        IReadOnlyList<string> sequence = order;
+        if (locationOrder is { Count: > 0 })
         {
-            var key = order[i];
+            var next = new List<string>(order.Count);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var raw in locationOrder)
+            {
+                var key = (raw ?? "").Trim();
+                if (key.Length == 0 || !actions.ContainsKey(key) || !seen.Add(key)) continue;
+                next.Add(labels.TryGetValue(key, out var label) ? label : key);
+            }
+
+            foreach (var key in order)
+            {
+                if (seen.Add(key)) next.Add(labels[key]);
+            }
+
+            sequence = next;
+        }
+
+        var stops = new GameRouteStop[sequence.Count];
+        for (var i = 0; i < sequence.Count; i++)
+        {
+            var key = sequence[i];
             stops[i] = new GameRouteStop(
                 Id: "loc:" + labels[key],
                 Sequence: i,
@@ -73,9 +105,14 @@ internal static class RouteProjection
 
 internal static class RouteSync
 {
-    public static void PublishFromHauling(GameState? state)
+    public static HaulComplexity Complexity { get; set; } = HaulComplexity.Moderate;
+    public static MapCatalog? Map { get; set; }
+
+    public static HaulPlanResult PublishFromHauling(GameState? state)
     {
-        if (state is null) return;
-        state.PublishRoute(RouteProjection.FromHauling(state.Hauling));
+        if (state is null) return HaulPlanResult.Empty;
+        var result = HaulPlanner.Plan(state, Complexity, Map);
+        state.PublishRoute(result.Plan);
+        return result;
     }
 }
