@@ -1,3 +1,18 @@
+# SC-navLink — Project Suspended
+
+> [!IMPORTANT]
+> **Development suspended November 10, 2026.**
+>
+> SC-navLink is no longer under active development and this repository is being retained as a historical/reference snapshot. There is currently no plan to continue development in this repository.
+>
+> Open implementation and planning items were closed as **not planned** when the project was suspended. This does not mean the underlying ideas were rejected; they remain available in the repository history for future reference.
+>
+> A future Star Citizen companion/tool concept may take a lighter, more modular direction. If pursued, that work should be treated as a separate project rather than a continuation of SC-navLink.
+
+---
+
+## Historical project README
+
 # Nexus - Star Citizen Companion App
 
 <p align="center">
